@@ -1,0 +1,26 @@
+listener:
+  host: 127.0.0.1
+  port: 8080
+  hmac_secret: "replace-with-speakr-webhook-secret"
+  fallback_event: recording.transcription.completed
+
+speakr:
+  base_url: http://speakr-host:7000
+  api_token: "replace-with-speakr-api-token"
+
+ollama:
+  host: http://192.168.1.50:11434
+  model: llama3
+  timeout_seconds: 90
+
+onenote:
+  notebook: "SC Team Notes"
+  section: "Meeting Transcripts"
+
+notifications:
+  enabled: true
+
+logging:
+  level: INFO
+  file: speakrbridge.log
+
