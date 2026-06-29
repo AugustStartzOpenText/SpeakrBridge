@@ -1,5 +1,5 @@
 listener:
-  host: 127.0.0.1
+  host: 0.0.0.0
   port: 8080
   hmac_secret: "replace-with-speakr-webhook-secret"
   fallback_event: recording.transcription.completed
@@ -23,4 +23,3 @@ notifications:
 logging:
   level: INFO
   file: speakrbridge.log
-

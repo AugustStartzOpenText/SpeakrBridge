@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 
 class ListenerConfig(BaseModel):
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8080
     hmac_secret: str
     fallback_event: str | None = "recording.transcription.completed"

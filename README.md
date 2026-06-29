@@ -40,6 +40,8 @@ python main.py
 curl http://127.0.0.1:8080/health
 ```
 
+If you are testing from another machine on your LAN, use the host machine's actual IP instead of `127.0.0.1`. If you are testing from an external webhook provider, you still need to expose this local port through a tunnel or reverse proxy because `0.0.0.0` only makes the service listen on local interfaces; it does not create a public URL.
+
 ## Current Notes
 
 - The webhook route returns `202 Accepted` immediately and does downstream work in a FastAPI background task.
