@@ -15,16 +15,16 @@ consulting team. Analyze the transcript below and respond ONLY with a
 valid JSON object. No explanation, no markdown fences.
 
 Return exactly this structure:
-{
+{{
   "executive_summary": "2-3 sentence overview",
   "key_decisions": ["decision 1", "decision 2"],
   "action_items": [
-    {"owner": "Name or Unknown", "task": "...", "due": "date or None"}
+    {{"owner": "Name or Unknown", "task": "...", "due": "date or None"}}
   ],
   "follow_up_questions": ["question 1"],
   "sentiment": "positive|neutral|mixed|negative",
   "topics": ["topic 1", "topic 2"]
-}
+}}
 
 TRANSCRIPT:
 {transcript_text}
@@ -64,4 +64,3 @@ class OllamaClient:
         except Exception:
             LOGGER.warning("Ollama returned non-JSON summary", extra={"response": raw_text[:500]})
             return None
-
