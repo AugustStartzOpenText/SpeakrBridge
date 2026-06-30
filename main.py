@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import logging
 from contextlib import asynccontextmanager
 
@@ -76,9 +77,17 @@ async def process_delivery(services: AppServices, recording_id: int) -> None:
         bundle = await services.speakr.fetch_recording_bundle(recording_id)
         structured_summary = await services.ollama.summarize(bundle.transcript)
         page = build_page(bundle, structured_summary, services.config)
-        page_id = services.onenote.write_page(page)
-        LOGGER.info("OneNote page created", extra={"page_id": page_id, "recording_id": recording_id})
-        services.notifier.notify_success(bundle.metadata.title, services.config.onenote.section)
+        result = services.onenote.write_page(page)
+        LOGGER.info(
+            "OneNote page created",
+            extra={
+                "page_id": result.page_id,
+                "recording_id": recording_id,
+                "section_id": result.section.section_id,
+                "section_name": result.section.section_name,
+            },
+        )
+        services.notifier.notify_success(bundle.metadata.title, result.section.path)
     except Exception as exc:
         LOGGER.exception("Failed to process Speakr delivery", extra={"recording_id": recording_id})
         try:
@@ -89,12 +98,69 @@ async def process_delivery(services: AppServices, recording_id: int) -> None:
         services.notifier.notify_failure(str(exc))
 
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="SpeakrBridge service and OneNote destination tools")
+    parser.add_argument(
+        "--list-onenote-sections",
+        action="store_true",
+        help="List available OneNote notebook/section destinations and exit.",
+    )
+    parser.add_argument(
+        "--set-destination",
+        action="store_true",
+        help="Interactively select and save the default OneNote destination.",
+    )
+    return parser
+
+
+def list_onenote_sections(services: AppServices) -> int:
+    sections = services.onenote.list_sections()
+    if not sections:
+        print("No OneNote sections found.")
+        return 1
+
+    saved = services.onenote.get_saved_destination()
+    for index, section in enumerate(sections, start=1):
+        marker = " (saved default)" if saved and saved.section_id == section.section_id else ""
+        print(f"{index}. {services.onenote.format_section_choice(section)}{marker}")
+    return 0
+
+
+def prompt_for_destination(services: AppServices) -> int:
+    sections = services.onenote.list_sections()
+    if not sections:
+        print("No OneNote sections found.")
+        return 1
+
+    saved = services.onenote.get_saved_destination()
+    for index, section in enumerate(sections, start=1):
+        marker = " (saved default)" if saved and saved.section_id == section.section_id else ""
+        print(f"{index}. {services.onenote.format_section_choice(section)}{marker}")
+
+    selection = input("Select destination number: ").strip()
+    if not selection.isdigit():
+        print("Selection must be a number.")
+        return 1
+
+    selected_index = int(selection)
+    if selected_index < 1 or selected_index > len(sections):
+        print("Selection out of range.")
+        return 1
+
+    chosen = services.onenote.set_destination(sections[selected_index - 1].section_id)
+    print(f"Saved destination: {services.onenote.format_section_choice(chosen)}")
+    return 0
+
+
 if __name__ == "__main__":
     app_config = load_config()
-    uvicorn.run(
-        "main:app",
-        host=app_config.listener.host,
-        port=app_config.listener.port,
-        reload=False,
-    )
+    configure_logging(app_config)
+    args = build_arg_parser().parse_args()
 
+    if args.list_onenote_sections or args.set_destination:
+        services = AppServices(app_config)
+        if args.list_onenote_sections:
+            raise SystemExit(list_onenote_sections(services))
+        raise SystemExit(prompt_for_destination(services))
+
+    uvicorn.run("main:app", host=app_config.listener.host, port=app_config.listener.port, reload=False)

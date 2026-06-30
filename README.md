@@ -27,14 +27,26 @@ This repository contains the initial service scaffold from the PRD. The core pip
 pip install -r requirements.txt
 ```
 
-3. Copy `config.yaml.example` to `config.yaml`, then edit `config.yaml` with your Speakr webhook secret, Speakr API token, Ollama host, and OneNote notebook settings.
-4. Start the service:
+3. Copy `config.yaml.example` to `config.yaml`, then edit `config.yaml` with your Speakr webhook secret, Speakr API token, Ollama host, and initial OneNote notebook settings.
+4. On Windows, optionally choose and persist the default OneNote destination:
+
+```bash
+python main.py --set-destination
+```
+
+You can inspect the currently available notebook/section targets with:
+
+```bash
+python main.py --list-onenote-sections
+```
+
+5. Start the service:
 
 ```bash
 python main.py
 ```
 
-5. Verify the service is up:
+6. Verify the service is up:
 
 ```bash
 curl http://127.0.0.1:8080/health
@@ -45,6 +57,7 @@ If you are testing from another machine on your LAN, use the host machine's actu
 ## Current Notes
 
 - The webhook route returns `202 Accepted` immediately and does downstream work in a FastAPI background task.
+- Saved OneNote destination defaults are stored locally in `user_settings.json` and take precedence over the notebook/section names in `config.yaml`.
 - Speakr pull calls are concurrent.
 - Ollama failures fall back to a reduced page and still try to preserve output.
 - If OneNote COM fails, the service writes the generated OneNote XML body into the system temp directory and logs the error.

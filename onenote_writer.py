@@ -10,6 +10,7 @@ from typing import Any
 
 from config import OneNoteConfig
 from models import OneNotePageContent
+from user_settings import UserDestination, UserSettingsStore
 
 
 @dataclass(frozen=True)
@@ -21,12 +22,19 @@ class OneNoteSection:
     path: str
 
 
+@dataclass(frozen=True)
+class OneNoteWriteResult:
+    page_id: str
+    section: OneNoteSection
+
+
 class OneNoteWriter:
     def __init__(self, config: OneNoteConfig) -> None:
         self._config = config
         self._script_path = Path(__file__).resolve().parent / "scripts" / "onenote_bridge.ps1"
+        self._settings = UserSettingsStore()
 
-    def write_page(self, page: OneNotePageContent) -> str:
+    def write_page(self, page: OneNotePageContent) -> OneNoteWriteResult:
         section = self._resolve_section()
         payload = self._run_bridge(
             "create_page",
@@ -36,7 +44,7 @@ class OneNoteWriter:
                 "pageXmlBody": page.page_xml_body,
             },
         )
-        return str(payload.get("pageId", ""))
+        return OneNoteWriteResult(page_id=str(payload.get("pageId", "")), section=section)
 
     def write_fallback_file(self, page: OneNotePageContent) -> Path:
         path = Path(tempfile.gettempdir()) / f"{self._safe_file_name(page.title)}.xml"
@@ -45,11 +53,16 @@ class OneNoteWriter:
 
     def _resolve_section(self) -> OneNoteSection:
         sections = self.list_sections()
+        saved = self._resolve_saved_section(sections)
+        if saved is not None:
+            return saved
+
         for section in sections:
             if (
                 section.notebook_name == self._config.notebook
                 and section.section_name == self._config.section
             ):
+                self._save_destination(section)
                 return section
 
         notebook_id = self._resolve_notebook_id(sections)
@@ -60,13 +73,59 @@ class OneNoteWriter:
                 "sectionName": self._config.section,
             },
         )
-        return OneNoteSection(
+        section = OneNoteSection(
             notebook_id=str(created.get("notebookId", notebook_id)),
             notebook_name=str(created.get("notebookName", self._config.notebook)),
             section_id=str(created.get("sectionId", "")),
             section_name=str(created.get("sectionName", self._config.section)),
             path=str(created.get("path", f"{self._config.notebook} / {self._config.section}")),
         )
+        self._save_destination(section)
+        return section
+
+    def get_saved_destination(self) -> OneNoteSection | None:
+        destination = self._settings.load().destination
+        if destination is None:
+            return None
+        return OneNoteSection(
+            notebook_id=destination.notebook_id,
+            notebook_name=destination.notebook_name,
+            section_id=destination.section_id,
+            section_name=destination.section_name,
+            path=destination.path,
+        )
+
+    def set_destination(self, section_id: str) -> OneNoteSection:
+        for section in self.list_sections():
+            if section.section_id == section_id:
+                self._save_destination(section)
+                return section
+        raise RuntimeError(f"Section not found: {section_id}")
+
+    def _resolve_saved_section(self, sections: list[OneNoteSection]) -> OneNoteSection | None:
+        saved = self.get_saved_destination()
+        if saved is None:
+            return None
+        for section in sections:
+            if section.section_id == saved.section_id:
+                self._save_destination(section)
+                return section
+        return None
+
+    def _save_destination(self, section: OneNoteSection) -> None:
+        self._settings.save_destination(
+            UserDestination(
+                notebook_id=section.notebook_id,
+                notebook_name=section.notebook_name,
+                section_id=section.section_id,
+                section_name=section.section_name,
+                path=section.path,
+            )
+        )
+
+    @staticmethod
+    def format_section_choice(section: OneNoteSection) -> str:
+        return f"{section.path} [{section.section_id}]"
 
     def list_sections(self) -> list[OneNoteSection]:
         payload = self._run_bridge("list_sections")
