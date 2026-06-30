@@ -27,7 +27,7 @@ This repository contains the initial service scaffold from the PRD. The core pip
 pip install -r requirements.txt
 ```
 
-3. Edit `config.yaml` with your Speakr webhook secret, Speakr API token, Ollama host, and OneNote notebook settings.
+3. Copy `config.yaml.example` to `config.yaml`, then edit `config.yaml` with your Speakr webhook secret, Speakr API token, Ollama host, and OneNote notebook settings.
 4. Start the service:
 
 ```bash

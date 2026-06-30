@@ -2,3 +2,4 @@ PRD/
 __pycache__/
 *.pyc
 .venv/
+config.yaml
