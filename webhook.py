@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 from dataclasses import dataclass
 
 from fastapi import HTTPException, Request, status
 
 from models import WebhookEnvelope
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -33,6 +36,15 @@ async def validate_speakr_request(request: Request, secret: str) -> ValidatedWeb
     try:
         payload = WebhookEnvelope.model_validate_json(raw_body)
     except Exception as exc:
+        LOGGER.exception(
+            "Invalid webhook payload",
+            extra={
+                "content_type": request.headers.get("content-type"),
+                "delivery_id": request.headers.get("Speakr-Delivery-Id"),
+                "event_header": request.headers.get("Speakr-Event"),
+                "raw_body": raw_body.decode("utf-8", errors="replace"),
+            },
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload") from exc
 
     event = request.headers.get("Speakr-Event", payload.event)
@@ -43,4 +55,3 @@ async def validate_speakr_request(request: Request, secret: str) -> ValidatedWeb
         payload=payload,
         raw_body=raw_body,
     )
-
