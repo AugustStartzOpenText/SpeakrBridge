@@ -54,10 +54,19 @@ curl http://127.0.0.1:8080/health
 
 If you are testing from another machine on your LAN, use the host machine's actual IP instead of `127.0.0.1`. If you are testing from an external webhook provider, you still need to expose this local port through a tunnel or reverse proxy because `0.0.0.0` only makes the service listen on local interfaces; it does not create a public URL.
 
+If you want per-recording manual routing instead of immediate OneNote writes, set `onenote.manual_selection: true` in `config.yaml`. Queued jobs can then be managed with:
+
+```bash
+python main.py --list-pending
+python main.py --route-pending
+python main.py --route-job <job-id>
+```
+
 ## Current Notes
 
 - The webhook route returns `202 Accepted` immediately and does downstream work in a FastAPI background task.
 - Saved OneNote destination defaults are stored locally in `user_settings.json` and take precedence over the notebook/section names in `config.yaml`.
+- Manual routing jobs are stored locally in `pending_jobs/` when `onenote.manual_selection` is enabled.
 - Speakr pull calls are concurrent.
 - Ollama failures fall back to a reduced page and still try to preserve output.
 - If OneNote COM fails, the service writes the generated OneNote XML body into the system temp directory and logs the error.

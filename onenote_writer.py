@@ -36,6 +36,9 @@ class OneNoteWriter:
 
     def write_page(self, page: OneNotePageContent) -> OneNoteWriteResult:
         section = self._resolve_section()
+        return self.write_page_to_section(page, section)
+
+    def write_page_to_section(self, page: OneNotePageContent, section: OneNoteSection) -> OneNoteWriteResult:
         payload = self._run_bridge(
             "create_page",
             {

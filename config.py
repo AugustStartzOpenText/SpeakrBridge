@@ -27,6 +27,7 @@ class OllamaConfig(BaseModel):
 class OneNoteConfig(BaseModel):
     notebook: str
     section: str
+    manual_selection: bool = False
 
 
 class NotificationsConfig(BaseModel):

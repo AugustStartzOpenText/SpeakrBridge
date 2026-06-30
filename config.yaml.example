@@ -16,6 +16,7 @@ ollama:
 onenote:
   notebook: "SC Team Notes"
   section: "Meeting Transcripts"
+  manual_selection: false
 
 notifications:
   enabled: true
