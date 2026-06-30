@@ -26,7 +26,7 @@ class RecordingMetadata(BaseModel):
     title: str
     participants: list[str] = Field(default_factory=list)
     meeting_date: datetime | None = None
-    audio_duration: int | None = None
+    audio_duration: float | None = None
     folder: str | None = None
     tags: list[str] = Field(default_factory=list)
     link: str | None = None

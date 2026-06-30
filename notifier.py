@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 LOGGER = logging.getLogger(__name__)
+MAX_TOAST_MESSAGE_LENGTH = 240
 
 
 class Notifier:
@@ -20,6 +21,7 @@ class Notifier:
         self._show_toast("SpeakrBridge", f"OneNote page creation failed - {detail}")
 
     def _show_toast(self, title: str, message: str) -> None:
+        message = self._truncate_message(message)
         try:
             from win10toast import ToastNotifier  # type: ignore[import-not-found]
 
@@ -35,3 +37,8 @@ class Notifier:
         except Exception:
             LOGGER.warning("Toast notification unavailable", exc_info=True)
 
+    @staticmethod
+    def _truncate_message(message: str) -> str:
+        if len(message) <= MAX_TOAST_MESSAGE_LENGTH:
+            return message
+        return message[: MAX_TOAST_MESSAGE_LENGTH - 3] + "..."

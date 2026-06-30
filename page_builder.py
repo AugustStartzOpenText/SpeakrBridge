@@ -145,10 +145,11 @@ def _safe_date(value: datetime | None) -> str:
     return value.strftime("%Y-%m-%d")
 
 
-def _format_duration(seconds: int | None) -> str:
+def _format_duration(seconds: float | None) -> str:
     if not seconds:
         return "Unknown"
-    minutes, remainder = divmod(seconds, 60)
+    rounded_seconds = int(round(seconds))
+    minutes, remainder = divmod(rounded_seconds, 60)
     hours, minutes = divmod(minutes, 60)
     if hours:
         return f"{hours}h {minutes}m {remainder}s"
