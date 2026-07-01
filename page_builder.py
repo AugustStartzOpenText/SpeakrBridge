@@ -33,12 +33,13 @@ def build_page(
                 f"Date: {meeting_date}",
                 f"Duration: {_format_duration(bundle.metadata.audio_duration)}",
                 f"Participants: {', '.join(bundle.metadata.participants) or 'Unknown'}",
+                f"Tags: {_format_tags(bundle.metadata.tags)}",
                 f"Recording: {bundle.metadata.link or 'Unavailable'}",
             ],
             y,
         )
     )
-    y += 180
+    y += 210
     outlines.append(
         _build_outline(
             [
@@ -91,6 +92,11 @@ def _bullet_lines(items: list[str]) -> list[str]:
     if not items:
         return ["None"]
     return [f"- {item}" for item in items]
+
+
+def _format_tags(tags: list[str]) -> str:
+    normalized = [tag.strip() for tag in tags if tag.strip()]
+    return ", ".join(normalized) if normalized else "None"
 
 
 def _action_item_lines(items: list) -> list[str]:
