@@ -5,3 +5,7 @@ __pycache__/
 config.yaml
 user_settings.json
 pending_jobs/
+generated/
+scoping_jobs.db
+scoping_jobs.db-shm
+scoping_jobs.db-wal

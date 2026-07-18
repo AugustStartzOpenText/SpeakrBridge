@@ -1,0 +1,231 @@
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+import unittest
+from unittest.mock import patch
+
+from config import OllamaConfig
+from models import RecordingMetadata, SpeakrRecordingBundle
+from scoping.catalog import ScopingTemplateCatalog
+from scoping.extraction import (
+    build_extraction_prompt,
+    build_sources,
+    extraction_to_word_values,
+    ScopingExtractor,
+    validate_extraction_payload,
+)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+TEMPLATE_ID = "open_text_fax_install_upgrade_2025_08_20"
+
+
+class ScopingExtractionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.template = ScopingTemplateCatalog(base_dir=BASE_DIR).get(TEMPLATE_ID)
+        self.bundle = SpeakrRecordingBundle(
+            metadata=RecordingMetadata(
+                id=42,
+                title="Example Hospital RightFax Upgrade",
+                participants=["Casey Customer", "Sam Consultant"],
+                meeting_date=datetime(2026, 7, 18, 9, 0),
+                tags=["rightfax", "upgrade"],
+            ),
+            notes="Customer wants no onsite services. Target completion is October 15.",
+            summary_markdown="Upgrade the existing RightFax 16.6 environment with 24 FoIP channels.",
+            transcript=(
+                "Casey Customer: We are Example Hospital and currently run RightFax 16.6. "
+                "We have 24 FoIP channels and need SMTP with OAuth for Microsoft 365."
+            ),
+        )
+        self.sources = build_sources(self.bundle)
+
+    def test_upgrade_prompt_is_derived_from_applicable_answers_and_all_sources(self) -> None:
+        prompt = build_extraction_prompt(
+            template=self.template,
+            mode="upgrade",
+            sources=self.sources,
+        )
+        self.assertIn('"answer_id": "current_open_text_fax_version"', prompt)
+        self.assertNotIn('"answer_id": "project_type"', prompt)
+        self.assertIn("Customer wants no onsite services", prompt)
+        self.assertIn("currently run RightFax 16.6", prompt)
+
+    def test_found_answer_requires_verifiable_exact_evidence(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "current_open_text_fax_version",
+                        "status": "found",
+                        "value": "16.6",
+                        "confidence": 0.98,
+                        "evidence": [
+                            {
+                                "source": "transcript",
+                                "quote": "currently run RightFax 16.6",
+                            }
+                        ],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+        answer = result.answer("current_open_text_fax_version")
+        self.assertEqual(answer.status, "found")
+        self.assertEqual(answer.value, "16.6")
+        self.assertGreater(len(result.warnings), 0)  # Omitted answers are explicitly tracked.
+
+    def test_unsupported_found_answer_is_downgraded_to_unknown(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "upgrade_suids",
+                        "status": "found",
+                        "value": "9999999",
+                        "confidence": 0.99,
+                        "evidence": [{"source": "transcript", "quote": "SUID 9999999"}],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+        answer = result.answer("upgrade_suids")
+        self.assertEqual(answer.status, "unknown")
+        self.assertIsNone(answer.value)
+        self.assertTrue(any("no verifiable evidence" in warning for warning in result.warnings))
+
+    def test_found_answers_translate_to_individual_word_controls(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "onsite_services_requested",
+                        "status": "found",
+                        "value": "no",
+                        "confidence": 1,
+                        "evidence": [{"source": "notes", "quote": "no onsite services"}],
+                    },
+                    {
+                        "answer_id": "email_integrations",
+                        "status": "found",
+                        "value": ["smtp_pop3_oauth"],
+                        "confidence": 0.95,
+                        "evidence": [
+                            {"source": "transcript", "quote": "SMTP with OAuth for Microsoft 365"}
+                        ],
+                    },
+                    {
+                        "answer_id": "channel_count",
+                        "status": "found",
+                        "value": 24,
+                        "confidence": 0.9,
+                        "evidence": [{"source": "transcript", "quote": "24 FoIP channels"}],
+                    },
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+        values = extraction_to_word_values(result=result, template=self.template)
+        self.assertFalse(values["onsite_services_yes"])
+        self.assertTrue(values["onsite_services_no"])
+        self.assertTrue(values["email_smtp_pop3_oauth"])
+        self.assertFalse(values["email_none"])
+        self.assertEqual(values["channel_count"], "24")
+
+    def test_inferred_answers_are_not_written_by_default(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "managed_services_interest",
+                        "status": "inferred",
+                        "value": "no",
+                        "confidence": 0.5,
+                        "evidence": [],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+        self.assertNotIn(
+            "managed_services_no",
+            extraction_to_word_values(result=result, template=self.template),
+        )
+        self.assertTrue(
+            extraction_to_word_values(
+                result=result,
+                template=self.template,
+                include_inferred=True,
+            )["managed_services_no"]
+        )
+
+
+class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
+    async def test_extractor_requests_json_and_validates_response(self) -> None:
+        template = ScopingTemplateCatalog(base_dir=BASE_DIR).get(TEMPLATE_ID)
+        bundle = SpeakrRecordingBundle(
+            metadata=RecordingMetadata(id=7, title="Example Upgrade"),
+            transcript="Customer: We currently run RightFax 16.6.",
+        )
+        captured: dict = {}
+
+        class FakeResponse:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {
+                    "response": (
+                        '{"answers":[{"answer_id":"current_open_text_fax_version",'
+                        '"status":"found","value":"16.6","confidence":0.99,'
+                        '"evidence":[{"source":"transcript",'
+                        '"quote":"currently run RightFax 16.6"}]}]}'
+                    )
+                }
+
+        class FakeClient:
+            def __init__(self, *, timeout: int) -> None:
+                captured["timeout"] = timeout
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback) -> None:
+                return None
+
+            async def post(self, url: str, *, json: dict) -> FakeResponse:
+                captured["url"] = url
+                captured["payload"] = json
+                return FakeResponse()
+
+        config = OllamaConfig(host="http://ollama.test:11434", model="test-model")
+        with patch("scoping.extraction.httpx.AsyncClient", FakeClient):
+            result = await ScopingExtractor(config).extract(
+                bundle=bundle,
+                template=template,
+                mode="upgrade",
+            )
+
+        self.assertEqual(result.answer("current_open_text_fax_version").value, "16.6")
+        self.assertEqual(captured["timeout"], 180)
+        self.assertEqual(captured["url"], "http://ollama.test:11434/api/generate")
+        self.assertEqual(captured["payload"]["format"], "json")
+        self.assertEqual(captured["payload"]["options"]["temperature"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

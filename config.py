@@ -22,12 +22,20 @@ class OllamaConfig(BaseModel):
     host: str
     model: str = "llama3"
     timeout_seconds: int = 90
+    scoping_timeout_seconds: int = 180
 
 
 class OneNoteConfig(BaseModel):
     notebook: str
     section: str
     manual_selection: bool = False
+
+
+class ScopingConfig(BaseModel):
+    enabled: bool = True
+    api_token: str | None = None
+    database_file: str = "scoping_jobs.db"
+    output_directory: str = "generated/scoping"
 
 
 class NotificationsConfig(BaseModel):
@@ -44,6 +52,7 @@ class AppConfig(BaseModel):
     speakr: SpeakrConfig
     ollama: OllamaConfig
     onenote: OneNoteConfig
+    scoping: ScopingConfig = Field(default_factory=ScopingConfig)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, Request, status
@@ -15,6 +16,12 @@ from ollama_client import OllamaClient
 from onenote_writer import OneNoteWriter
 from pending_jobs import PendingJob, PendingJobStore
 from page_builder import build_page
+from scoping.api import router as scoping_router
+from scoping.catalog import ScopingTemplateCatalog
+from scoping.extraction import ScopingExtractor
+from scoping.jobs import ScopingJobStore
+from scoping.service import ScopingService
+from scoping.word_writer import WordScopingWriter
 from speakr_client import SpeakrClient
 from webhook import validate_speakr_request
 
@@ -23,12 +30,34 @@ LOGGER = logging.getLogger(__name__)
 
 class AppServices:
     def __init__(self, config: AppConfig) -> None:
+        base_dir = Path(__file__).resolve().parent
         self.config = config
         self.speakr = SpeakrClient(config.speakr)
         self.ollama = OllamaClient(config.ollama)
         self.onenote = OneNoteWriter(config.onenote)
         self.pending_jobs = PendingJobStore()
         self.notifier = Notifier(config.notifications.enabled)
+        self.scoping: ScopingService | None = None
+        if config.scoping.enabled:
+            database_path = _resolve_config_path(base_dir, config.scoping.database_file)
+            output_directory = _resolve_config_path(base_dir, config.scoping.output_directory)
+            self.scoping = ScopingService(
+                catalog=ScopingTemplateCatalog(base_dir=base_dir),
+                store=ScopingJobStore(database_path),
+                recording_source=self.speakr,
+                extractor=ScopingExtractor(config.ollama),
+                writer=WordScopingWriter(),
+                output_directory=output_directory,
+                api_token=config.scoping.api_token,
+            )
+            recovered = self.scoping.recover_interrupted()
+            if recovered:
+                LOGGER.warning("Recovered interrupted scoping jobs", extra={"count": recovered})
+
+
+def _resolve_config_path(base_dir: Path, configured_path: str) -> Path:
+    path = Path(configured_path)
+    return path.resolve() if path.is_absolute() else (base_dir / path).resolve()
 
 
 def configure_logging(config: AppConfig) -> None:
@@ -52,6 +81,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SpeakrBridge", version="0.1.0", lifespan=lifespan)
+app.include_router(scoping_router)
 
 
 @app.get("/health")

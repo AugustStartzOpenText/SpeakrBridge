@@ -12,11 +12,18 @@ ollama:
   host: http://192.168.1.50:11434
   model: llama3
   timeout_seconds: 90
+  scoping_timeout_seconds: 180
 
 onenote:
   notebook: "SC Team Notes"
   section: "Meeting Transcripts"
   manual_selection: false
+
+scoping:
+  enabled: true
+  api_token: "replace-with-a-long-random-scoping-api-token"
+  database_file: scoping_jobs.db
+  output_directory: generated/scoping
 
 notifications:
   enabled: true

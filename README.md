@@ -17,6 +17,8 @@ This repository contains the initial service scaffold from the PRD. The core pip
 - `notifier.py`: Windows toast notifications with `win10toast` and `plyer`.
 - `config.py`: YAML config loading and validation.
 - `models.py`: shared Pydantic models used across the pipeline.
+- `scoping/`: versioned scoping-form manifests and Word document generation.
+- `scoping_cli.py`: template inspection and draft-generation commands.
 
 ## Setup
 
@@ -61,6 +63,87 @@ python main.py --list-pending
 python main.py --route-pending
 python main.py --route-job <job-id>
 ```
+
+## Scoping Document Development
+
+The first configured scoping form is the combined OpenText Fax installation / upgrade quoting
+worksheet. It is exposed as two project modes that share the same source document:
+
+```bash
+python scoping_cli.py list
+```
+
+On Windows with desktop Microsoft Word installed, validate that the source still matches its
+67-field manifest before generating documents:
+
+```powershell
+python .\scoping_cli.py inspect open_text_fax_install_upgrade_2025_08_20
+```
+
+Create an isolated DOCX draft using field values from JSON:
+
+```powershell
+python .\scoping_cli.py generate open_text_fax_install_upgrade_2025_08_20 upgrade `
+  --values .\scoping\examples\open_text_fax_values.example.json
+```
+
+The generator opens the legacy source read-only, verifies the expected field count and types,
+resets template defaults, and saves a new `.docx`. It refuses to overwrite an existing output.
+The source worksheet is never modified.
+
+Fetch the latest Speakr content for a recording and run grounded AI extraction:
+
+```powershell
+python .\scoping_cli.py extract open_text_fax_install_upgrade_2025_08_20 upgrade 123
+```
+
+The extraction JSON retains per-answer status, confidence, exact evidence, and validation warnings.
+Generate a Word draft using only source-supported `found` answers:
+
+```powershell
+python .\scoping_cli.py generate open_text_fax_install_upgrade_2025_08_20 upgrade `
+  --extraction .\generated\scoping\extractions\recording_123_open_text_fax_install_upgrade_2025_08_20_upgrade.json
+```
+
+`inferred` values are excluded by default. The optional `--include-inferred` flag is intended for
+explicitly reviewed extraction files, not unattended generation.
+
+## Scoping Jobs API
+
+When scoping is enabled, SpeakrBridge persists jobs in SQLite and exposes the workflow under
+`/api/scoping`. Relative database and output paths are resolved from the application directory.
+Configure `scoping.api_token` before accessing these endpoints over the network. Without a token,
+the API permits loopback requests only.
+
+Create a job and start extraction immediately:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/scoping/jobs \
+  -H "Authorization: Bearer $SCOPING_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"recording_id":123,"template_id":"open_text_fax_install_upgrade_2025_08_20","mode":"upgrade"}'
+```
+
+Inspect persisted extraction results and validation warnings:
+
+```bash
+curl -H "Authorization: Bearer $SCOPING_API_TOKEN" \
+  http://127.0.0.1:8080/api/scoping/jobs/<job-id>
+```
+
+Generate a document using verified `found` answers, then download it:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/scoping/jobs/<job-id>/generate \
+  -H "Authorization: Bearer $SCOPING_API_TOKEN" \
+  -H "Content-Type: application/json" -d '{"include_inferred":false}'
+curl -OJ -H "Authorization: Bearer $SCOPING_API_TOKEN" \
+  http://127.0.0.1:8080/api/scoping/jobs/<job-id>/document
+```
+
+List endpoints return compact job summaries; the detail endpoint returns evidence and all extracted
+answers. Failed extraction and generation operations can be retried through the corresponding action
+endpoint. Jobs left in progress by a service restart are recovered as failed and retryable.
 
 ## Current Notes
 

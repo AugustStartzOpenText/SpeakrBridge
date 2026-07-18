@@ -1,0 +1,18 @@
+{
+  "end_user_company_name": "Example Customer",
+  "end_user_contact_name": "Customer Contact",
+  "onsite_services_no": true,
+  "after_hours_services_no": true,
+  "current_open_text_fax_version": "16.6",
+  "upgrade_suids": "1234567",
+  "telephony_type": "FoIP-Enabled Channels",
+  "channel_count": "24",
+  "project_overview": "Upgrade the existing OpenText Fax environment while preserving current integrations.",
+  "module_pdf": true,
+  "module_email_integration": true,
+  "email_smtp_pop3_oauth": true,
+  "user_sync_ad": true,
+  "managed_services_no": true,
+  "training_admin_intermediate": true,
+  "training_admin_intermediate_count": "2"
+}
