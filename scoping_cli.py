@@ -6,7 +6,6 @@ from datetime import datetime
 import json
 from pathlib import Path
 import re
-import sys
 from typing import Any
 
 from config import load_config
@@ -96,7 +95,6 @@ async def extract_recording(args: argparse.Namespace, template) -> Path:
         config.ollama,
         progress=lambda batch, total: print(
             f"Extracting with {config.ollama.model}: batch {batch}/{total}...",
-            file=sys.stderr,
         ),
     ).extract(
         bundle=bundle,
