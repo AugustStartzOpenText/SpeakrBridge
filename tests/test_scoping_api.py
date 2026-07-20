@@ -35,6 +35,7 @@ class ScopingApiTests(unittest.TestCase):
         app.state.services = SimpleNamespace(scoping=service)
         app.include_router(router)
         self.client = TestClient(app, headers={"Authorization": "Bearer test-token"})
+        self.service = service
 
     def tearDown(self) -> None:
         self.client.close()
@@ -99,6 +100,41 @@ class ScopingApiTests(unittest.TestCase):
             json={"include_inferred": False},
         )
         self.assertEqual(response.status_code, 409)
+
+    def test_inbox_can_be_listed_started_and_dismissed(self) -> None:
+        self.service.store.enqueue_recording(
+            recording_id=125,
+            recording_title="Hospital Fax Upgrade",
+            onenote_page_id="page-125",
+        )
+
+        inbox_response = self.client.get("/api/scoping/inbox")
+        self.assertEqual(inbox_response.status_code, 200)
+        self.assertEqual(inbox_response.json()[0]["status"], "pending")
+
+        create_response = self.client.post(
+            "/api/scoping/jobs",
+            json={
+                "recording_id": 125,
+                "template_id": TEMPLATE_ID,
+                "mode": "upgrade",
+                "start_extraction": False,
+            },
+        )
+        self.assertEqual(create_response.status_code, 201)
+        started = self.client.get("/api/scoping/inbox").json()[0]
+        self.assertEqual(started["status"], "started")
+        self.assertEqual(started["job_id"], create_response.json()["job_id"])
+
+        dismiss_response = self.client.patch(
+            "/api/scoping/inbox/125",
+            json={"status": "dismissed"},
+        )
+        self.assertEqual(dismiss_response.status_code, 200)
+        self.assertEqual(dismiss_response.json()["status"], "dismissed")
+
+        dismissed = self.client.get("/api/scoping/inbox", params={"status": "dismissed"})
+        self.assertEqual(len(dismissed.json()), 1)
 
     def test_missing_api_token_is_rejected(self) -> None:
         response = self.client.get(

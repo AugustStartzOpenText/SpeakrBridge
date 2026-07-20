@@ -2,16 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 import hmac
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from scoping.jobs import (
+    InboxStatus,
     InvalidScopingJobTransition,
     JobStatus,
     ScopingJob,
+    ScopingInboxItem,
     ScopingJobNotFound,
 )
 from scoping.models import ProjectMode
@@ -29,6 +31,10 @@ class CreateScopingJobRequest(BaseModel):
 
 class GenerateScopingDocumentRequest(BaseModel):
     include_inferred: bool = False
+
+
+class UpdateInboxStatusRequest(BaseModel):
+    status: Literal["pending", "dismissed"]
 
 
 class TemplateModeResponse(BaseModel):
@@ -115,6 +121,27 @@ async def list_scoping_templates(request: Request) -> list[ScopingTemplateRespon
         )
         for template in service.catalog.list_templates()
     ]
+
+
+@router.get("/inbox", response_model=list[ScopingInboxItem])
+async def list_scoping_inbox(
+    request: Request,
+    inbox_status: InboxStatus | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[ScopingInboxItem]:
+    return _service(request).store.list_inbox(status=inbox_status, limit=limit)
+
+
+@router.patch("/inbox/{recording_id}", response_model=ScopingInboxItem)
+async def update_scoping_inbox_item(
+    recording_id: int,
+    payload: UpdateInboxStatusRequest,
+    request: Request,
+) -> ScopingInboxItem:
+    try:
+        return _service(request).store.set_inbox_status(recording_id, payload.status)
+    except ScopingJobNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inbox item not found") from exc
 
 
 @router.get("/templates/{template_id}", response_model=ScopingTemplateDetailResponse)

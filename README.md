@@ -2,6 +2,8 @@
 
 SpeakrBridge receives local `Speakr` webhook events, pulls recording content from the Speakr API, requests a structured summary from `Ollama`, and writes a formatted page into `OneNote` through the Windows COM API.
 
+For the normal start-to-finish operating procedure, see [SpeakrBridge Daily Workflow](END_USER_GUIDE.md).
+
 ## Status
 
 This repository contains the initial service scaffold from the PRD. The core pipeline is implemented, but OneNote COM hierarchy handling and production hardening still need real Windows validation against a live Speakr and OneNote environment.
@@ -158,9 +160,31 @@ List endpoints return compact job summaries; the detail endpoint returns evidenc
 answers. Failed extraction and generation operations can be retried through the corresponding action
 endpoint. Jobs left in progress by a service restart are recovered as failed and retryable.
 
+## Scoping Web Workflow
+
+Open the workflow page from the machine running SpeakrBridge or another computer that can reach it:
+
+```text
+http://<speakrbridge-host>:8080/scoping
+```
+
+After SpeakrBridge successfully routes a recording to OneNote, it adds that recording to the
+persistent scoping inbox. The page lets the user choose a configured form and workflow, start AI
+extraction, monitor the job, generate the Word document, and download the completed DOCX. Meetings
+that do not need a scoping document can be dismissed.
+
+If `scoping.api_token` is configured, enter that token through the page's **API token** control. The
+token is retained only in browser session storage. A token is required for access from another
+computer; without one, the scoping API remains restricted to loopback requests.
+
+The web page is served by the existing FastAPI process and has no separate frontend build or runtime.
+Word generation still requires SpeakrBridge to run on Windows with desktop Word installed; a Linux
+Speakr container cannot perform the COM automation.
+
 ## Current Notes
 
 - The webhook route returns `202 Accepted` immediately and does downstream work in a FastAPI background task.
+- Successfully routed OneNote recordings are added idempotently to the scoping inbox.
 - Saved OneNote destination defaults are stored locally in `user_settings.json` and take precedence over the notebook/section names in `config.yaml`.
 - Manual routing jobs are stored locally in `pending_jobs/` when `onenote.manual_selection` is enabled.
 - Speakr pull calls are concurrent.

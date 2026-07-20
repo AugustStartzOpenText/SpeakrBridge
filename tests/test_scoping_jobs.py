@@ -59,6 +59,40 @@ class ScopingJobStoreTests(unittest.TestCase):
         self.assertEqual(second.revision, 2)
         self.assertEqual(install.revision, 1)
 
+    def test_inbox_registration_is_idempotent_and_tracks_selected_job(self) -> None:
+        first = self.store.enqueue_recording(
+            recording_id=17,
+            recording_title="RightFax Upgrade",
+            onenote_page_id="page-1",
+            onenote_link="onenote:https://example.test/page-1",
+        )
+        repeated = self.store.enqueue_recording(
+            recording_id=17,
+            recording_title="RightFax Upgrade - Updated",
+            onenote_page_id="page-2",
+        )
+
+        self.assertEqual(first.status, "pending")
+        self.assertEqual(repeated.recording_title, "RightFax Upgrade - Updated")
+        self.assertEqual(repeated.onenote_page_id, "page-2")
+        self.assertEqual(repeated.onenote_link, "onenote:https://example.test/page-1")
+        self.assertEqual(len(self.store.list_inbox()), 1)
+
+        job = self.store.create_job(
+            recording_id=17,
+            template_id="template-1",
+            template_version="v1",
+            mode="upgrade",
+        )
+        started = self.store.mark_inbox_started(17, job.job_id)
+        self.assertIsNotNone(started)
+        self.assertEqual(started.status, "started")
+        self.assertEqual(started.job_id, job.job_id)
+
+        dismissed = self.store.set_inbox_status(17, "dismissed")
+        self.assertEqual(dismissed.status, "dismissed")
+        self.assertEqual(self.store.list_inbox(status="dismissed"), [dismissed])
+
     def test_extraction_and_generation_follow_persisted_state_machine(self) -> None:
         job = self.store.create_job(
             recording_id=10,

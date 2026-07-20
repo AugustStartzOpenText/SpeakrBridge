@@ -71,12 +71,14 @@ class ScopingService:
     ) -> ScopingJob:
         template = self.catalog.get(template_id)
         template.mode(mode)
-        return self.store.create_job(
+        job = self.store.create_job(
             recording_id=recording_id,
             template_id=template.id,
             template_version=template.version,
             mode=mode,
         )
+        self.store.mark_inbox_started(recording_id, job.job_id)
+        return job
 
     def claim_extraction(self, job_id: str) -> ScopingJob:
         return self.store.claim_extraction(job_id)

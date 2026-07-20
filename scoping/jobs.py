@@ -15,6 +15,7 @@ from scoping.models import ProjectMode
 
 JobStatus = Literal["ready", "extracting", "review", "generating", "completed", "failed"]
 JobOperation = Literal["extraction", "generation"]
+InboxStatus = Literal["pending", "started", "dismissed"]
 
 
 class ScopingJob(BaseModel):
@@ -35,6 +36,17 @@ class ScopingJob(BaseModel):
     updated_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+
+class ScopingInboxItem(BaseModel):
+    recording_id: int = Field(ge=1)
+    recording_title: str
+    onenote_page_id: str | None = None
+    onenote_link: str | None = None
+    status: InboxStatus
+    job_id: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ScopingJobNotFound(KeyError):
@@ -93,6 +105,102 @@ class ScopingJobStore:
                 ),
             )
         return self.get_job(job_id)
+
+    def enqueue_recording(
+        self,
+        *,
+        recording_id: int,
+        recording_title: str,
+        onenote_page_id: str | None = None,
+        onenote_link: str | None = None,
+    ) -> ScopingInboxItem:
+        if recording_id < 1:
+            raise ValueError("recording_id must be positive")
+        now = _utc_now()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO scoping_inbox (
+                    recording_id, recording_title, onenote_page_id, onenote_link,
+                    status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, 'pending', ?, ?)
+                ON CONFLICT(recording_id) DO UPDATE SET
+                    recording_title = excluded.recording_title,
+                    onenote_page_id = COALESCE(excluded.onenote_page_id, scoping_inbox.onenote_page_id),
+                    onenote_link = COALESCE(excluded.onenote_link, scoping_inbox.onenote_link),
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    recording_id,
+                    recording_title,
+                    onenote_page_id or None,
+                    onenote_link or None,
+                    now,
+                    now,
+                ),
+            )
+        return self.get_inbox_item(recording_id)
+
+    def get_inbox_item(self, recording_id: int) -> ScopingInboxItem:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM scoping_inbox WHERE recording_id = ?",
+                (recording_id,),
+            ).fetchone()
+        if row is None:
+            raise ScopingJobNotFound(f"Inbox recording {recording_id}")
+        return self._row_to_inbox_item(row)
+
+    def list_inbox(
+        self,
+        *,
+        status: InboxStatus | None = None,
+        limit: int = 100,
+    ) -> list[ScopingInboxItem]:
+        if limit < 1 or limit > 500:
+            raise ValueError("limit must be between 1 and 500")
+        parameters: list[object] = []
+        where = ""
+        if status is not None:
+            where = "WHERE status = ?"
+            parameters.append(status)
+        parameters.append(limit)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM scoping_inbox {where} ORDER BY updated_at DESC LIMIT ?",
+                parameters,
+            ).fetchall()
+        return [self._row_to_inbox_item(row) for row in rows]
+
+    def mark_inbox_started(self, recording_id: int, job_id: str) -> ScopingInboxItem | None:
+        now = _utc_now()
+        with self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE scoping_inbox
+                SET status = 'started', job_id = ?, updated_at = ?
+                WHERE recording_id = ?
+                """,
+                (job_id, now, recording_id),
+            )
+        if result.rowcount == 0:
+            return None
+        return self.get_inbox_item(recording_id)
+
+    def set_inbox_status(self, recording_id: int, status: InboxStatus) -> ScopingInboxItem:
+        now = _utc_now()
+        with self._connect() as connection:
+            result = connection.execute(
+                """
+                UPDATE scoping_inbox
+                SET status = ?, updated_at = ?
+                WHERE recording_id = ?
+                """,
+                (status, now, recording_id),
+            )
+        if result.rowcount == 0:
+            raise ScopingJobNotFound(f"Inbox recording {recording_id}")
+        return self.get_inbox_item(recording_id)
 
     def get_job(self, job_id: str) -> ScopingJob:
         with self._connect() as connection:
@@ -287,6 +395,23 @@ class ScopingJobStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS scoping_jobs_status ON scoping_jobs(status)"
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scoping_inbox (
+                    recording_id INTEGER PRIMARY KEY CHECK (recording_id > 0),
+                    recording_title TEXT NOT NULL,
+                    onenote_page_id TEXT,
+                    onenote_link TEXT,
+                    status TEXT NOT NULL CHECK (status IN ('pending', 'started', 'dismissed')),
+                    job_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS scoping_inbox_status ON scoping_inbox(status)"
+            )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -343,6 +468,19 @@ class ScopingJobStore:
             updated_at=datetime.fromisoformat(row["updated_at"]),
             started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
             completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None),
+        )
+
+    @staticmethod
+    def _row_to_inbox_item(row: sqlite3.Row) -> ScopingInboxItem:
+        return ScopingInboxItem(
+            recording_id=row["recording_id"],
+            recording_title=row["recording_title"],
+            onenote_page_id=row["onenote_page_id"],
+            onenote_link=row["onenote_link"],
+            status=row["status"],
+            job_id=row["job_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
         )
 
 

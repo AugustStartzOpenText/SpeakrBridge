@@ -25,6 +25,7 @@ class OneNoteSection:
 @dataclass(frozen=True)
 class OneNoteWriteResult:
     page_id: str
+    page_link: str
     section: OneNoteSection
 
 
@@ -47,7 +48,11 @@ class OneNoteWriter:
                 "pageXmlBody": page.page_xml_body,
             },
         )
-        return OneNoteWriteResult(page_id=str(payload.get("pageId", "")), section=section)
+        return OneNoteWriteResult(
+            page_id=str(payload.get("pageId", "")),
+            page_link=str(payload.get("link", "")),
+            section=section,
+        )
 
     def write_fallback_file(self, page: OneNotePageContent) -> Path:
         path = Path(tempfile.gettempdir()) / f"{self._safe_file_name(page.title)}.xml"

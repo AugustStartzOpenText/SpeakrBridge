@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scoping Desk | SpeakrBridge</title>
+  <link rel="stylesheet" href="/scoping/styles.css">
+</head>
+<body>
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">SpeakrBridge</p>
+      <h1>Scoping Desk</h1>
+      <p class="lede">Turn completed meeting notes into a first-pass Word scoping document.</p>
+    </div>
+    <div class="connection">
+      <span id="connection-dot" class="connection-dot"></span>
+      <span id="connection-label">Connecting</span>
+      <button id="token-button" class="text-button" type="button">API token</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="token-panel" class="token-panel hidden" aria-label="API token">
+      <label for="api-token">Scoping API token</label>
+      <div class="token-row">
+        <input id="api-token" type="password" autocomplete="off" placeholder="Enter token from config.yaml">
+        <button id="save-token" class="button" type="button">Connect</button>
+      </div>
+      <p>The token stays in this browser tab and is not written to disk.</p>
+    </section>
+
+    <div id="message" class="message hidden" role="status"></div>
+
+    <section class="section-block">
+      <div class="section-heading">
+        <div>
+          <p class="section-number">01</p>
+          <h2>Ready from OneNote</h2>
+        </div>
+        <button id="refresh-button" class="button secondary" type="button">Refresh</button>
+      </div>
+      <div id="inbox" class="inbox-grid">
+        <p class="empty-state">Loading routed meetings...</p>
+      </div>
+    </section>
+
+    <section class="section-block jobs-block">
+      <div class="section-heading">
+        <div>
+          <p class="section-number">02</p>
+          <h2>Document Jobs</h2>
+        </div>
+        <p class="section-note">Extraction uses the Ollama host configured in SpeakrBridge.</p>
+      </div>
+      <div id="jobs" class="job-list">
+        <p class="empty-state">No jobs loaded.</p>
+      </div>
+    </section>
+  </main>
+
+  <template id="inbox-card-template">
+    <article class="inbox-card">
+      <div class="card-topline">
+        <span class="recording-id"></span>
+        <span class="inbox-status"></span>
+      </div>
+      <h3 class="recording-title"></h3>
+      <p class="routed-time"></p>
+      <div class="form-grid">
+        <label>Form<select class="template-select"></select></label>
+        <label>Workflow<select class="mode-select"></select></label>
+      </div>
+      <div class="card-actions">
+        <button class="button start-button" type="button">Extract answers</button>
+        <a class="text-link onenote-link hidden" target="_blank" rel="noreferrer">Open OneNote</a>
+        <button class="text-button dismiss-button" type="button">Dismiss</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="/scoping/app.js" defer></script>
+</body>
+</html>

@@ -11,9 +11,8 @@ from fastapi.responses import JSONResponse
 
 from config import AppConfig, load_config
 from notifier import Notifier
-from onenote_writer import OneNoteSection
 from ollama_client import OllamaClient
-from onenote_writer import OneNoteWriter
+from onenote_writer import OneNoteSection, OneNoteWriteResult, OneNoteWriter
 from pending_jobs import PendingJob, PendingJobStore
 from page_builder import build_page
 from scoping.api import router as scoping_router
@@ -22,6 +21,7 @@ from scoping.extraction import ScopingExtractor
 from scoping.jobs import ScopingJobStore
 from scoping.service import ScopingService
 from scoping.word_writer import WordScopingWriter
+from scoping.web import router as scoping_web_router
 from speakr_client import SpeakrClient
 from webhook import validate_speakr_request
 
@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SpeakrBridge", version="0.1.0", lifespan=lifespan)
 app.include_router(scoping_router)
+app.include_router(scoping_web_router)
 
 
 @app.get("/health")
@@ -140,6 +141,7 @@ async def process_delivery(
             return
 
         result = deliver_pending_job_to_default(services, prepared_job)
+        register_scoping_inbox_item(services, prepared_job, result)
         LOGGER.info(
             "OneNote page created",
             extra={
@@ -184,6 +186,27 @@ def deliver_pending_job_to_default(services: AppServices, job: PendingJob):
 
 def deliver_pending_job_to_section(services: AppServices, job: PendingJob, section: OneNoteSection):
     return services.onenote.write_page_to_section(job.page, section)
+
+
+def register_scoping_inbox_item(
+    services: AppServices,
+    job: PendingJob,
+    result: OneNoteWriteResult,
+) -> None:
+    if services.scoping is None:
+        return
+    try:
+        services.scoping.store.enqueue_recording(
+            recording_id=job.recording_id,
+            recording_title=job.meeting_title,
+            onenote_page_id=result.page_id,
+            onenote_link=result.page_link,
+        )
+    except Exception:
+        LOGGER.exception(
+            "Failed to register scoping inbox item",
+            extra={"recording_id": job.recording_id, "onenote_page_id": result.page_id},
+        )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -312,6 +335,7 @@ def route_single_job(services: AppServices, job: PendingJob) -> int:
 def _write_job_with_default(services: AppServices, job: PendingJob) -> int:
     try:
         result = deliver_pending_job_to_default(services, job)
+        register_scoping_inbox_item(services, job, result)
         services.pending_jobs.delete_job(job.job_id)
         print(f"Wrote page to {result.section.path}")
         services.notifier.notify_success(job.meeting_title, result.section.path)
@@ -350,6 +374,7 @@ def _write_job_with_selected_section(
     section = sections[selected_index - 1]
     try:
         result = deliver_pending_job_to_section(services, job, section)
+        register_scoping_inbox_item(services, job, result)
         services.pending_jobs.delete_job(job.job_id)
         update_default = input("Save this as the new default destination? [y/N]: ").strip().lower()
         if update_default == "y":

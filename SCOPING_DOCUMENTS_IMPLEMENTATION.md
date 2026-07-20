@@ -73,13 +73,21 @@ Implementation notes:
 
 ### 4. Bridge web workflow
 
-Status: pending.
+Status: initial workflow implemented; live Windows validation pending.
 
-- List meetings ready for document generation.
-- Present product/workflow choices.
-- Show extraction progress, unknown fields, and validation warnings.
+- Persist successfully routed OneNote meetings in an idempotent scoping inbox.
+- List meetings ready for document generation at `/scoping`.
+- Present product/workflow choices and allow irrelevant meetings to be dismissed.
+- Show extraction/generation progress, answer counts, and warning counts.
 - Generate and download the DOCX without requiring users to edit a duplicate web form.
-- Add a OneNote link or notification as the initial launch point.
+- Preserve the OneNote page link when the desktop API provides one.
+
+Implementation notes:
+
+- The page is static HTML, CSS, and JavaScript served by the existing FastAPI process.
+- The configured scoping bearer token is kept in browser session storage, not embedded in the page.
+- The UI polls only while extraction or generation is active.
+- Word COM automation remains on the Windows SpeakrBridge host rather than in the Linux Speakr container.
 
 ### 5. Hardening and expansion
 
