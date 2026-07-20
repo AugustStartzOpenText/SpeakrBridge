@@ -287,6 +287,43 @@ class ScopingExtractionTests(unittest.TestCase):
         self.assertEqual(result.answer("email_integrations").status, "found")
         self.assertEqual(result.answer("email_integrations").value, ["smtp_pop3_oauth"])
 
+    def test_epic_appends_integration_module_and_review_warning(self) -> None:
+        sources = self.sources | {"notes": "Epic is an integration application for this project."}
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "modules",
+                        "status": "found",
+                        "value": ["pdf_module"],
+                        "confidence": 0.8,
+                        "evidence": [
+                            {"source": "speakr_summary", "quote": "Upgrade the existing RightFax"}
+                        ],
+                    },
+                    {
+                        "answer_id": "integration_applications",
+                        "status": "found",
+                        "value": "Epic",
+                        "confidence": 0.95,
+                        "evidence": [
+                            {"source": "notes", "quote": "Epic is an integration application"}
+                        ],
+                    },
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=sources,
+        )
+
+        self.assertEqual(result.answer("modules").value, ["pdf_module", "integration_module"])
+        values = extraction_to_word_values(result=result, template=self.template)
+        self.assertTrue(values["module_pdf"])
+        self.assertTrue(values["module_integration"])
+        self.assertTrue(any("confirm which method" in item for item in result.warnings))
+
 
 class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_extractor_requests_json_and_validates_response(self) -> None:

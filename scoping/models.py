@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -10,6 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 FieldType = Literal["text", "checkbox", "dropdown"]
 ProjectMode = Literal["install", "upgrade"]
 AnswerType = Literal["text", "single_choice", "multi_choice"]
+DerivationOperation = Literal["set_if_missing", "append"]
 
 
 class TemplateField(BaseModel):
@@ -60,15 +60,22 @@ class AnswerDerivationRule(BaseModel):
     id: str
     source_answer_id: str
     target_answer_id: str
-    source_pattern: str
+    match_any: list[str] = Field(min_length=1)
+    exclude_any: list[str] = Field(default_factory=list)
     target_value: str | list[str]
+    operation: DerivationOperation = "set_if_missing"
+    review_warning: str | None = None
 
     @model_validator(mode="after")
-    def validate_source_pattern(self) -> "AnswerDerivationRule":
-        try:
-            re.compile(self.source_pattern)
-        except re.error as exc:
-            raise ValueError(f"Derivation rule {self.id!r} has invalid source_pattern: {exc}") from exc
+    def validate_match_terms(self) -> "AnswerDerivationRule":
+        match_terms = [term.strip().casefold() for term in self.match_any]
+        excluded_terms = [term.strip().casefold() for term in self.exclude_any]
+        if any(not term for term in match_terms + excluded_terms):
+            raise ValueError(f"Derivation rule {self.id!r} contains an empty match term")
+        if len(match_terms) != len(set(match_terms)):
+            raise ValueError(f"Derivation rule {self.id!r} contains duplicate match terms")
+        if set(match_terms) & set(excluded_terms):
+            raise ValueError(f"Derivation rule {self.id!r} matches and excludes the same term")
         return self
 
 
@@ -161,6 +168,8 @@ class ScopingTemplate(BaseModel):
                 raise ValueError(f"Derivation rule {rule.id!r} target answer must be a choice")
             if target_answer.type == "single_choice" and len(target_values) != 1:
                 raise ValueError(f"Derivation rule {rule.id!r} must select one target value")
+            if rule.operation == "append" and target_answer.type != "multi_choice":
+                raise ValueError(f"Derivation rule {rule.id!r} append target must be multi-choice")
             if any(value not in target_answer.choices for value in target_values):
                 raise ValueError(f"Derivation rule {rule.id!r} contains an invalid target value")
         return self

@@ -340,34 +340,59 @@ def apply_derivation_rules(
             continue
         source = answers[source_index]
         target = answers[target_index]
-        if (
-            source.status != "found"
-            or not isinstance(source.value, str)
-            or target.status not in {"unknown", "inferred"}
-        ):
+        if source.status != "found" or not isinstance(source.value, str):
             continue
 
         grounded_text = "\n".join(evidence.quote for evidence in source.evidence)
-        if not grounded_text or re.search(rule.source_pattern, grounded_text) is None:
+        if not grounded_text or not any(_contains_term(grounded_text, term) for term in rule.match_any):
+            continue
+        if any(_contains_term(grounded_text, term) for term in rule.exclude_any):
             continue
 
         target_definition = template.answer(rule.target_answer_id)
-        target_value = _normalize_value(target_definition, rule.target_value)
+        if rule.operation == "set_if_missing":
+            if target.status not in {"unknown", "inferred"}:
+                continue
+            target_value = _normalize_value(target_definition, rule.target_value)
+        else:
+            existing_values = list(target.value) if isinstance(target.value, list) else []
+            added_values = rule.target_value if isinstance(rule.target_value, list) else [rule.target_value]
+            if all(value in existing_values for value in added_values):
+                continue
+            if any(value != "none" for value in added_values):
+                existing_values = [value for value in existing_values if value != "none"]
+            target_value = _normalize_value(
+                target_definition,
+                existing_values + [value for value in added_values if value not in existing_values],
+            )
         if target_value is None:
             raise RuntimeError(f"Derivation rule {rule.id!r} produced an invalid target value")
+        evidence = list(target.evidence)
+        for item in source.evidence:
+            if item not in evidence:
+                evidence.append(item)
         answers[target_index] = ExtractedAnswer(
             answer_id=target.answer_id,
             status="found",
             value=target_value,
-            confidence=source.confidence,
-            evidence=source.evidence,
+            confidence=max(source.confidence, target.confidence),
+            evidence=evidence,
         )
-        warnings.append(
+        warning = (
             f"Derived answer {target.answer_id!r} using deterministic rule {rule.id!r} "
             f"from {source.answer_id!r}"
         )
+        if rule.review_warning:
+            warning += f"; review required: {rule.review_warning}"
+        warnings.append(warning)
 
     return result.model_copy(update={"answers": answers, "warnings": warnings})
+
+
+def _contains_term(text: str, term: str) -> bool:
+    normalized_text = _normalize_for_match(text)
+    normalized_term = _normalize_for_match(term)
+    return re.search(rf"(?<!\w){re.escape(normalized_term)}(?!\w)", normalized_text) is not None
 
 
 def _validate_answer(

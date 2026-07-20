@@ -43,6 +43,7 @@ Status: implemented; real-recording model evaluation pending.
 - Validate enums, dates, booleans, mutually exclusive choices, and mode applicability.
 - Translate business answers into individual Word controls only after validation.
 - Apply versioned deterministic derivation rules only from verified evidence, without overriding explicit answers.
+- Keep derivation rules readable with `match_any`, optional `exclude_any`, and `set_if_missing` or `append` operations.
 
 Implementation notes:
 

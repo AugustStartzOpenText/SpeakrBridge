@@ -51,7 +51,7 @@
     {"id": "project_overview", "label": "Project overview, servers, goals, and important factors", "type": "text", "guidance": "Summarize only concrete project facts discussed in the sources."},
     {"id": "modules", "label": "OpenText Fax modules in scope", "type": "multi_choice", "choices": ["pdf_module", "searchable_pdf", "encryption_module", "analytics_module", "shared_services_module", "archive_module", "faxutil_web", "email_integration", "mfp_module", "integration_module", "xml_generator", "sap_connector", "sharepoint_connector", "securedocs", "other"]},
     {"id": "mfp_brands", "label": "MFP brand(s)", "type": "text"},
-    {"id": "integration_applications", "label": "Integration Module application(s)", "type": "text"},
+    {"id": "integration_applications", "label": "Integration Module application(s)", "type": "text", "guidance": "Capture Epic when discussed. Record FCL or API only when the source explicitly identifies the method."},
     {"id": "other_module_details", "label": "Other module details", "type": "text"},
     {"id": "module_comments", "label": "Module comments and existing-versus-new configuration", "type": "text", "guidance": "For upgrades, distinguish modules already configured from modules being added."},
     {"id": "email_integrations", "label": "Email integrations in scope", "type": "multi_choice", "choices": ["exchange_connector", "exchange_ews", "smtp_pop3_on_prem", "smtp_pop3_oauth", "lotus_notes", "none"], "guidance": "Microsoft 365 / Office 365 maps to smtp_pop3_oauth unless the source explicitly identifies EWS, which maps to exchange_ews."},
@@ -72,15 +72,25 @@
       "id": "microsoft_365_ews_email_integration",
       "source_answer_id": "email_comments",
       "target_answer_id": "email_integrations",
-      "source_pattern": "(?is)(?=.*(?:office\\s*365|microsoft\\s*365|\\bo365\\b|\\bm365\\b))(?=.*(?:\\bews\\b|exchange web services))",
+      "match_any": ["EWS", "Exchange Web Services"],
       "target_value": ["exchange_ews"]
     },
     {
       "id": "microsoft_365_oauth_email_integration",
       "source_answer_id": "email_comments",
       "target_answer_id": "email_integrations",
-      "source_pattern": "(?is)^(?!.*(?:\\bews\\b|exchange web services)).*(?:office\\s*365|microsoft\\s*365|\\bo365\\b|\\bm365\\b)",
+      "match_any": ["Office 365", "Microsoft 365", "O365", "M365"],
+      "exclude_any": ["EWS", "Exchange Web Services"],
       "target_value": ["smtp_pop3_oauth"]
+    },
+    {
+      "id": "epic_requires_integration_module",
+      "source_answer_id": "integration_applications",
+      "target_answer_id": "modules",
+      "match_any": ["Epic"],
+      "target_value": ["integration_module"],
+      "operation": "append",
+      "review_warning": "Epic integrations must use FCL or API; confirm which method is in scope."
     }
   ],
   "fields": [
