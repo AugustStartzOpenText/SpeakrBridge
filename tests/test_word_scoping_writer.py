@@ -76,6 +76,13 @@ class WordScopingWriterTests(unittest.TestCase):
         self.assertIn('83 { return "dropdown" }', bridge_source)
         self.assertNotIn('72 { return "dropdown" }', bridge_source)
 
+    def test_bridge_avoids_generic_list_array_conversion_on_windows_powershell(self) -> None:
+        bridge_source = (BASE_DIR / "scripts" / "word_scoping_bridge.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("System.Collections.Generic.List", bridge_source)
+
 
 if __name__ == "__main__":
     unittest.main()

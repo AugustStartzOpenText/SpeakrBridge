@@ -57,11 +57,11 @@ function Get-DropdownChoices {
     if ((Get-FormFieldTypeName -FormField $FormField) -ne "dropdown") {
         return @()
     }
-    $choices = New-Object System.Collections.Generic.List[string]
+    $choices = @()
     for ($index = 1; $index -le [int]$FormField.DropDown.ListEntries.Count; $index++) {
-        $choices.Add([string]$FormField.DropDown.ListEntries.Item($index).Name)
+        $choices += [string]$FormField.DropDown.ListEntries.Item($index).Name
     }
-    return @($choices)
+    return $choices
 }
 
 function Get-FormFieldDescriptor {
@@ -240,15 +240,15 @@ function Inspect-Template {
         param($WordApp, $Document, $Context)
 
         $layout = Assert-TemplateLayout -Document $Document -Payload $Context
-        $fields = New-Object System.Collections.Generic.List[object]
+        $fields = @()
         for ($index = 1; $index -le [int]$Document.FormFields.Count; $index++) {
-            $fields.Add((Get-FormFieldDescriptor -FormField $Document.FormFields.Item($index)))
+            $fields += ,(Get-FormFieldDescriptor -FormField $Document.FormFields.Item($index))
         }
         return [ordered]@{
             templatePath = [string]$Context.templatePath
             fieldCount   = $layout.fieldCount
             typeCounts   = $layout.typeCounts
-            fields       = @($fields)
+            fields       = $fields
         }
     }
 }
