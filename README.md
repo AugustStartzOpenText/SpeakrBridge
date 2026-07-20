@@ -94,8 +94,12 @@ The source worksheet is never modified.
 Fetch the latest Speakr content for a recording and run grounded AI extraction:
 
 ```powershell
+python .\scoping_cli.py recordings
+python .\scoping_cli.py recordings --query "RightFax"
 python .\scoping_cli.py extract open_text_fax_install_upgrade_2025_08_20 upgrade 123
 ```
+
+The `recordings` command lists recent completed recordings with the numeric ID required by `extract`.
 
 The extraction JSON retains per-answer status, confidence, exact evidence, and validation warnings.
 Generate a Word draft using only source-supported `found` answers:

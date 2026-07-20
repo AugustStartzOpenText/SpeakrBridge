@@ -15,11 +15,25 @@ from scoping.word_writer import WordScopingWriter
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def recording_limit(value: str) -> int:
+    parsed = int(value)
+    if not 1 <= parsed <= 100:
+        raise argparse.ArgumentTypeError("limit must be between 1 and 100")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect and generate template-driven scoping documents")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("list", help="List configured scoping templates and project modes")
+
+    recordings_parser = subparsers.add_parser(
+        "recordings",
+        help="List recent completed Speakr recordings and their IDs",
+    )
+    recordings_parser.add_argument("--limit", type=recording_limit, default=10, metavar="N")
+    recordings_parser.add_argument("--query", help="Filter recordings by title or participant")
 
     inspect_parser = subparsers.add_parser("inspect", help="Validate a source template using Microsoft Word")
     inspect_parser.add_argument("template_id")
@@ -90,6 +104,24 @@ async def extract_recording(args: argparse.Namespace, template) -> Path:
     return output_path
 
 
+async def list_recordings(args: argparse.Namespace) -> None:
+    from speakr_client import SpeakrClient
+
+    config = load_config()
+    recordings = await SpeakrClient(config.speakr).list_recordings(
+        limit=args.limit,
+        query=args.query,
+    )
+    if not recordings:
+        print("No completed Speakr recordings found.")
+        return
+
+    print("ID | MEETING DATE | STATUS | TITLE")
+    for recording in recordings:
+        meeting_date = recording.meeting_date.isoformat() if recording.meeting_date else "unknown"
+        print(f"{recording.id} | {meeting_date} | {recording.status or 'unknown'} | {recording.title or ''}")
+
+
 def main() -> int:
     args = build_parser().parse_args()
     catalog = ScopingTemplateCatalog(base_dir=BASE_DIR)
@@ -100,6 +132,10 @@ def main() -> int:
             print(f"{template.id} | {template.name} | version {template.version} | source {source_status}")
             for mode in template.project_modes:
                 print(f"  {mode.id}: {mode.label}")
+        return 0
+
+    if args.command == "recordings":
+        asyncio.run(list_recordings(args))
         return 0
 
     template = catalog.get(args.template_id)

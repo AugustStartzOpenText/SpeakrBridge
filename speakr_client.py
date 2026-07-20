@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 
 from config import SpeakrConfig
-from models import RecordingMetadata, SpeakrRecordingBundle
+from models import RecordingMetadata, RecordingRef, SpeakrRecordingBundle
 
 
 class SpeakrClient:
@@ -15,6 +15,35 @@ class SpeakrClient:
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._config.api_token}"}
+
+    async def list_recordings(
+        self,
+        *,
+        status: str = "completed",
+        limit: int = 10,
+        query: str | None = None,
+    ) -> list[RecordingRef]:
+        params: dict[str, str | int] = {
+            "page": 1,
+            "per_page": limit,
+            "status": status,
+            "sort_by": "created_at",
+            "sort_order": "desc",
+        }
+        if query:
+            params["q"] = query
+
+        async with httpx.AsyncClient(
+            base_url=self._config.base_url,
+            headers=self._headers(),
+            timeout=30.0,
+        ) as client:
+            payload = await self._get_json(client, "/api/v1/recordings", params=params)
+
+        raw_recordings = payload.get("recordings")
+        if not isinstance(raw_recordings, list):
+            raise ValueError("Expected recordings array from /api/v1/recordings")
+        return [RecordingRef.model_validate(item) for item in raw_recordings if isinstance(item, dict)]
 
     async def fetch_recording_bundle(self, recording_id: int) -> SpeakrRecordingBundle:
         async with httpx.AsyncClient(
@@ -56,8 +85,13 @@ class SpeakrClient:
             notes=notes.strip() if notes else None,
         )
 
-    async def _get_json(self, client: httpx.AsyncClient, path: str) -> dict[str, Any]:
-        response = await client.get(path)
+    async def _get_json(
+        self,
+        client: httpx.AsyncClient,
+        path: str,
+        params: dict[str, str | int] | None = None,
+    ) -> dict[str, Any]:
+        response = await client.get(path, params=params)
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, dict):
