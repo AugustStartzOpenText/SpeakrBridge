@@ -256,6 +256,37 @@ class ScopingExtractionTests(unittest.TestCase):
 
         self.assertEqual(result.answer("email_integrations").value, ["exchange_connector"])
 
+    def test_grounded_derivation_supersedes_ungrounded_inference(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "email_integrations",
+                        "status": "inferred",
+                        "value": ["exchange_connector"],
+                        "confidence": 0.4,
+                        "evidence": [],
+                    },
+                    {
+                        "answer_id": "email_comments",
+                        "status": "found",
+                        "value": "Microsoft 365 is used for email.",
+                        "confidence": 0.9,
+                        "evidence": [
+                            {"source": "transcript", "quote": "Microsoft 365"}
+                        ],
+                    },
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+
+        self.assertEqual(result.answer("email_integrations").status, "found")
+        self.assertEqual(result.answer("email_integrations").value, ["smtp_pop3_oauth"])
+
 
 class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_extractor_requests_json_and_validates_response(self) -> None:

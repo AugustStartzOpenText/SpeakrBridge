@@ -340,7 +340,11 @@ def apply_derivation_rules(
             continue
         source = answers[source_index]
         target = answers[target_index]
-        if source.status != "found" or not isinstance(source.value, str) or target.status != "unknown":
+        if (
+            source.status != "found"
+            or not isinstance(source.value, str)
+            or target.status not in {"unknown", "inferred"}
+        ):
             continue
 
         grounded_text = "\n".join(evidence.quote for evidence in source.evidence)
