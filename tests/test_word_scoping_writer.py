@@ -66,6 +66,16 @@ class WordScopingWriterTests(unittest.TestCase):
                     output_path=output_path,
                 )
 
+    def test_bridge_uses_word_legacy_form_field_type_values(self) -> None:
+        bridge_source = (BASE_DIR / "scripts" / "word_scoping_bridge.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('70 { return "text" }', bridge_source)
+        self.assertIn('71 { return "checkbox" }', bridge_source)
+        self.assertIn('83 { return "dropdown" }', bridge_source)
+        self.assertNotIn('72 { return "dropdown" }', bridge_source)
+
 
 if __name__ == "__main__":
     unittest.main()

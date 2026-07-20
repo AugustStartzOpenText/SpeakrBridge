@@ -36,7 +36,7 @@ function Get-FormFieldTypeName {
     switch ([int]$FormField.Type) {
         70 { return "text" }
         71 { return "checkbox" }
-        72 { return "dropdown" }
+        83 { return "dropdown" }
         default { return "unknown" }
     }
 }
