@@ -324,6 +324,33 @@ class ScopingExtractionTests(unittest.TestCase):
         self.assertTrue(values["module_integration"])
         self.assertTrue(any("confirm which method" in item for item in result.warnings))
 
+    def test_mfp_brands_append_mfp_module_and_populate_brands(self) -> None:
+        sources = self.sources | {"notes": "The MFP devices are Xerox and Ricoh."}
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "mfp_brands",
+                        "status": "found",
+                        "value": "Xerox and Ricoh",
+                        "confidence": 0.98,
+                        "evidence": [
+                            {"source": "notes", "quote": "MFP devices are Xerox and Ricoh"}
+                        ],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=sources,
+        )
+
+        values = extraction_to_word_values(result=result, template=self.template)
+        self.assertTrue(values["module_mfp"])
+        self.assertEqual(values["mfp_brands"], "Xerox and Ricoh")
+        self.assertTrue(any("mfp_devices_require_mfp_module" in item for item in result.warnings))
+
 
 class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_extractor_requests_json_and_validates_response(self) -> None:

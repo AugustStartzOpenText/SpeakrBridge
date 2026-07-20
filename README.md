@@ -107,9 +107,9 @@ schema-constrained batches. Configure `ollama.scoping_batch_size` to tune the de
 `ollama.scoping_context_tokens` defaults these requests to a 32K context window.
 
 Template manifests can define readable `derivation_rules`. A rule identifies a grounded source answer,
-terms in `match_any`, optional `exclude_any` terms, a target answer/value, and either `set_if_missing`
-or `append`. An optional `review_warning` flags details that the user must confirm rather than inventing
-them. Rules only run when a matching term appears in verified source evidence.
+terms in `match_any` or `when_source_found`, optional `exclude_any` terms, a target answer/value, and
+either `set_if_missing` or `append`. An optional `review_warning` flags details that the user must confirm
+rather than inventing them. Rules only run from verified source evidence.
 
 Generate a Word draft using only source-supported `found` answers:
 

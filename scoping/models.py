@@ -60,7 +60,8 @@ class AnswerDerivationRule(BaseModel):
     id: str
     source_answer_id: str
     target_answer_id: str
-    match_any: list[str] = Field(min_length=1)
+    when_source_found: bool = False
+    match_any: list[str] = Field(default_factory=list)
     exclude_any: list[str] = Field(default_factory=list)
     target_value: str | list[str]
     operation: DerivationOperation = "set_if_missing"
@@ -70,6 +71,12 @@ class AnswerDerivationRule(BaseModel):
     def validate_match_terms(self) -> "AnswerDerivationRule":
         match_terms = [term.strip().casefold() for term in self.match_any]
         excluded_terms = [term.strip().casefold() for term in self.exclude_any]
+        if self.when_source_found == bool(match_terms):
+            raise ValueError(
+                f"Derivation rule {self.id!r} must define either when_source_found or match_any"
+            )
+        if self.when_source_found and excluded_terms:
+            raise ValueError(f"Derivation rule {self.id!r} cannot exclude terms when_source_found")
         if any(not term for term in match_terms + excluded_terms):
             raise ValueError(f"Derivation rule {self.id!r} contains an empty match term")
         if len(match_terms) != len(set(match_terms)):

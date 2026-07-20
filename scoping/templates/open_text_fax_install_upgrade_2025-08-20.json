@@ -50,7 +50,7 @@
     {"id": "new_physical_boards", "label": "Will new physical boards be purchased?", "type": "single_choice", "choices": ["yes", "no"], "applies_to": ["upgrade"]},
     {"id": "project_overview", "label": "Project overview, servers, goals, and important factors", "type": "text", "guidance": "Summarize only concrete project facts discussed in the sources."},
     {"id": "modules", "label": "OpenText Fax modules in scope", "type": "multi_choice", "choices": ["pdf_module", "searchable_pdf", "encryption_module", "analytics_module", "shared_services_module", "archive_module", "faxutil_web", "email_integration", "mfp_module", "integration_module", "xml_generator", "sap_connector", "sharepoint_connector", "securedocs", "other"]},
-    {"id": "mfp_brands", "label": "MFP brand(s)", "type": "text"},
+    {"id": "mfp_brands", "label": "MFP brand(s)", "type": "text", "guidance": "List every MFP brand explicitly referenced. If MFP devices are in scope but no brand is stated, use 'Brand not specified'; never guess a brand."},
     {"id": "integration_applications", "label": "Integration Module application(s)", "type": "text", "guidance": "Capture Epic when discussed. Record FCL or API only when the source explicitly identifies the method."},
     {"id": "other_module_details", "label": "Other module details", "type": "text"},
     {"id": "module_comments", "label": "Module comments and existing-versus-new configuration", "type": "text", "guidance": "For upgrades, distinguish modules already configured from modules being added."},
@@ -91,6 +91,14 @@
       "target_value": ["integration_module"],
       "operation": "append",
       "review_warning": "Epic integrations must use FCL or API; confirm which method is in scope."
+    },
+    {
+      "id": "mfp_devices_require_mfp_module",
+      "source_answer_id": "mfp_brands",
+      "target_answer_id": "modules",
+      "when_source_found": true,
+      "target_value": ["mfp_module"],
+      "operation": "append"
     }
   ],
   "fields": [

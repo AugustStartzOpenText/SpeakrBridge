@@ -50,11 +50,12 @@ class ScopingTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(len(self.template.answers), 36)
         self.assertEqual(len(self.template.extractable_answers("install")), 32)
         self.assertEqual(len(self.template.extractable_answers("upgrade")), 35)
-        self.assertEqual(len(self.template.derivation_rules), 3)
+        self.assertEqual(len(self.template.derivation_rules), 4)
         self.assertEqual(
             self.template.derivation_rules[1].match_any,
             ["Office 365", "Microsoft 365", "O365", "M365"],
         )
+        self.assertTrue(self.template.derivation_rules[3].when_source_found)
 
     def test_catalog_rejects_incomplete_field_mapping(self) -> None:
         manifest = json.loads(self.template.manifest_path.read_text(encoding="utf-8"))

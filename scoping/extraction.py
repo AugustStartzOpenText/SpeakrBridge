@@ -344,10 +344,13 @@ def apply_derivation_rules(
             continue
 
         grounded_text = "\n".join(evidence.quote for evidence in source.evidence)
-        if not grounded_text or not any(_contains_term(grounded_text, term) for term in rule.match_any):
+        if not grounded_text:
             continue
-        if any(_contains_term(grounded_text, term) for term in rule.exclude_any):
-            continue
+        if not rule.when_source_found:
+            if not any(_contains_term(grounded_text, term) for term in rule.match_any):
+                continue
+            if any(_contains_term(grounded_text, term) for term in rule.exclude_any):
+                continue
 
         target_definition = template.answer(rule.target_answer_id)
         if rule.operation == "set_if_missing":
