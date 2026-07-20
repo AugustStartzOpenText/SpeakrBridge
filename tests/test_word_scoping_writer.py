@@ -83,6 +83,14 @@ class WordScopingWriterTests(unittest.TestCase):
 
         self.assertNotIn("System.Collections.Generic.List", bridge_source)
 
+    def test_bridge_reports_manifest_compatible_collection_positions(self) -> None:
+        bridge_source = (BASE_DIR / "scripts" / "word_scoping_bridge.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("index   = $Position", bridge_source)
+        self.assertNotIn("index   = [int]$FormField.Index", bridge_source)
+
 
 if __name__ == "__main__":
     unittest.main()

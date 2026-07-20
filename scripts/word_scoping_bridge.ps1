@@ -65,10 +65,13 @@ function Get-DropdownChoices {
 }
 
 function Get-FormFieldDescriptor {
-    param($FormField)
+    param(
+        $FormField,
+        [int]$Position
+    )
 
     return [ordered]@{
-        index   = [int]$FormField.Index
+        index   = $Position
         name    = [string]$FormField.Name
         type    = Get-FormFieldTypeName -FormField $FormField
         value   = Get-FormFieldValue -FormField $FormField
@@ -242,7 +245,8 @@ function Inspect-Template {
         $layout = Assert-TemplateLayout -Document $Document -Payload $Context
         $fields = @()
         for ($index = 1; $index -le [int]$Document.FormFields.Count; $index++) {
-            $fields += ,(Get-FormFieldDescriptor -FormField $Document.FormFields.Item($index))
+            $field = $Document.FormFields.Item($index)
+            $fields += ,(Get-FormFieldDescriptor -FormField $field -Position $index)
         }
         return [ordered]@{
             templatePath = [string]$Context.templatePath
