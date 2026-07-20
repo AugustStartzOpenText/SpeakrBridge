@@ -9,14 +9,8 @@ import re
 from typing import Any
 
 from config import load_config
-from scoping import (
-    ScopingExtractionResult,
-    ScopingExtractor,
-    ScopingTemplateCatalog,
-    WordScopingWriter,
-    extraction_to_word_values,
-)
-from speakr_client import SpeakrClient
+from scoping.catalog import ScopingTemplateCatalog
+from scoping.word_writer import WordScopingWriter
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -78,6 +72,9 @@ def default_extraction_path(recording_id: int, template_id: str, mode: str) -> P
 
 
 async def extract_recording(args: argparse.Namespace, template) -> Path:
+    from scoping.extraction import ScopingExtractor
+    from speakr_client import SpeakrClient
+
     config = load_config()
     bundle = await SpeakrClient(config.speakr).fetch_recording_bundle(args.recording_id)
     result = await ScopingExtractor(config.ollama).extract(
@@ -116,6 +113,8 @@ def main() -> int:
         return 0
 
     if args.extraction:
+        from scoping.extraction import ScopingExtractionResult, extraction_to_word_values
+
         extraction = ScopingExtractionResult.model_validate_json(
             args.extraction.read_text(encoding="utf-8")
         )
