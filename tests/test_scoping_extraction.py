@@ -173,6 +173,89 @@ class ScopingExtractionTests(unittest.TestCase):
             )["managed_services_no"]
         )
 
+    def test_grounded_microsoft_365_comment_derives_oauth_checkbox(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "email_comments",
+                        "status": "found",
+                        "value": "Customer uses Microsoft 365 for email.",
+                        "confidence": 0.9,
+                        "evidence": [
+                            {"source": "transcript", "quote": "OAuth for Microsoft 365"}
+                        ],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+
+        self.assertEqual(result.answer("email_integrations").value, ["smtp_pop3_oauth"])
+        self.assertTrue(extraction_to_word_values(result=result, template=self.template)["email_smtp_pop3_oauth"])
+        self.assertTrue(any("microsoft_365_oauth_email_integration" in item for item in result.warnings))
+
+    def test_grounded_microsoft_365_ews_comment_derives_ews_checkbox(self) -> None:
+        sources = self.sources | {"notes": "The Office 365 integration uses EWS."}
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "email_comments",
+                        "status": "found",
+                        "value": "Office 365 integration uses EWS.",
+                        "confidence": 0.95,
+                        "evidence": [
+                            {"source": "notes", "quote": "Office 365 integration uses EWS"}
+                        ],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=sources,
+        )
+
+        values = extraction_to_word_values(result=result, template=self.template)
+        self.assertTrue(values["email_exchange_ews"])
+        self.assertFalse(values["email_smtp_pop3_oauth"])
+
+    def test_explicit_email_integration_selection_wins_over_derivation(self) -> None:
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "email_integrations",
+                        "status": "found",
+                        "value": ["exchange_connector"],
+                        "confidence": 0.9,
+                        "evidence": [
+                            {"source": "transcript", "quote": "SMTP with OAuth for Microsoft 365"}
+                        ],
+                    },
+                    {
+                        "answer_id": "email_comments",
+                        "status": "found",
+                        "value": "Microsoft 365 is also mentioned.",
+                        "confidence": 0.9,
+                        "evidence": [
+                            {"source": "transcript", "quote": "Microsoft 365"}
+                        ],
+                    },
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=self.sources,
+        )
+
+        self.assertEqual(result.answer("email_integrations").value, ["exchange_connector"])
+
 
 class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
     async def test_extractor_requests_json_and_validates_response(self) -> None:

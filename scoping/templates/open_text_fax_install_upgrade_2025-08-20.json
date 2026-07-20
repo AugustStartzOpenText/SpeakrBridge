@@ -54,7 +54,7 @@
     {"id": "integration_applications", "label": "Integration Module application(s)", "type": "text"},
     {"id": "other_module_details", "label": "Other module details", "type": "text"},
     {"id": "module_comments", "label": "Module comments and existing-versus-new configuration", "type": "text", "guidance": "For upgrades, distinguish modules already configured from modules being added."},
-    {"id": "email_integrations", "label": "Email integrations in scope", "type": "multi_choice", "choices": ["exchange_connector", "exchange_ews", "smtp_pop3_on_prem", "smtp_pop3_oauth", "lotus_notes", "none"]},
+    {"id": "email_integrations", "label": "Email integrations in scope", "type": "multi_choice", "choices": ["exchange_connector", "exchange_ews", "smtp_pop3_on_prem", "smtp_pop3_oauth", "lotus_notes", "none"], "guidance": "Microsoft 365 / Office 365 maps to smtp_pop3_oauth unless the source explicitly identifies EWS, which maps to exchange_ews."},
     {"id": "email_comments", "label": "Email integration comments", "type": "text"},
     {"id": "user_synchronization", "label": "User synchronization", "type": "single_choice", "choices": ["active_directory", "ldap", "none"]},
     {"id": "user_sync_comments", "label": "User synchronization comments", "type": "text"},
@@ -66,6 +66,22 @@
     {"id": "training_admin_intermediate_count", "label": "Intermediate administrator training participant count", "type": "text"},
     {"id": "training_admin_advanced_count", "label": "Advanced administrator training participant count", "type": "text"},
     {"id": "training_faxutil_end_users_count", "label": "FaxUtil Web end-user training participant count", "type": "text"}
+  ],
+  "derivation_rules": [
+    {
+      "id": "microsoft_365_ews_email_integration",
+      "source_answer_id": "email_comments",
+      "target_answer_id": "email_integrations",
+      "source_pattern": "(?is)(?=.*(?:office\\s*365|microsoft\\s*365|\\bo365\\b|\\bm365\\b))(?=.*(?:\\bews\\b|exchange web services))",
+      "target_value": ["exchange_ews"]
+    },
+    {
+      "id": "microsoft_365_oauth_email_integration",
+      "source_answer_id": "email_comments",
+      "target_answer_id": "email_integrations",
+      "source_pattern": "(?is)^(?!.*(?:\\bews\\b|exchange web services)).*(?:office\\s*365|microsoft\\s*365|\\bo365\\b|\\bm365\\b)",
+      "target_value": ["smtp_pop3_oauth"]
+    }
   ],
   "fields": [
     {"id": "end_user_company_name", "answer_id": "end_user_company_name", "word_index": 1, "type": "text", "label": "End User Company Name"},

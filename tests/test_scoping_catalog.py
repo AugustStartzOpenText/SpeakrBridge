@@ -50,6 +50,7 @@ class ScopingTemplateCatalogTests(unittest.TestCase):
         self.assertEqual(len(self.template.answers), 36)
         self.assertEqual(len(self.template.extractable_answers("install")), 32)
         self.assertEqual(len(self.template.extractable_answers("upgrade")), 35)
+        self.assertEqual(len(self.template.derivation_rules), 2)
 
     def test_catalog_rejects_incomplete_field_mapping(self) -> None:
         manifest = json.loads(self.template.manifest_path.read_text(encoding="utf-8"))

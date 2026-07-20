@@ -275,7 +275,7 @@ def validate_extraction_payload(
         validated.append(answer)
         warnings.extend(answer_warnings)
 
-    return ScopingExtractionResult(
+    result = ScopingExtractionResult(
         template_id=template.id,
         template_version=template.version,
         mode=mode,
@@ -283,6 +283,7 @@ def validate_extraction_payload(
         answers=validated,
         warnings=warnings,
     )
+    return apply_derivation_rules(result=result, template=template)
 
 
 def extraction_to_word_values(
@@ -294,6 +295,7 @@ def extraction_to_word_values(
     if result.template_id != template.id or result.template_version != template.version:
         raise ValueError("Extraction result does not match the selected template version")
 
+    result = apply_derivation_rules(result=result, template=template)
     accepted_statuses = {"found", "inferred"} if include_inferred else {"found"}
     values: dict[str, str | bool] = {}
     for extracted in result.answers:
@@ -318,6 +320,50 @@ def extraction_to_word_values(
         for field in mapped_fields:
             values[field.id] = field.option_value in selected
     return values
+
+
+def apply_derivation_rules(
+    *,
+    result: ScopingExtractionResult,
+    template: ScopingTemplate,
+) -> ScopingExtractionResult:
+    if result.template_id != template.id or result.template_version != template.version:
+        raise ValueError("Extraction result does not match the selected template version")
+
+    answers = list(result.answers)
+    answer_indexes = {answer.answer_id: index for index, answer in enumerate(answers)}
+    warnings = list(result.warnings)
+    for rule in template.derivation_rules:
+        source_index = answer_indexes.get(rule.source_answer_id)
+        target_index = answer_indexes.get(rule.target_answer_id)
+        if source_index is None or target_index is None:
+            continue
+        source = answers[source_index]
+        target = answers[target_index]
+        if source.status != "found" or not isinstance(source.value, str) or target.status != "unknown":
+            continue
+
+        grounded_text = "\n".join(evidence.quote for evidence in source.evidence)
+        if not grounded_text or re.search(rule.source_pattern, grounded_text) is None:
+            continue
+
+        target_definition = template.answer(rule.target_answer_id)
+        target_value = _normalize_value(target_definition, rule.target_value)
+        if target_value is None:
+            raise RuntimeError(f"Derivation rule {rule.id!r} produced an invalid target value")
+        answers[target_index] = ExtractedAnswer(
+            answer_id=target.answer_id,
+            status="found",
+            value=target_value,
+            confidence=source.confidence,
+            evidence=source.evidence,
+        )
+        warnings.append(
+            f"Derived answer {target.answer_id!r} using deterministic rule {rule.id!r} "
+            f"from {source.answer_id!r}"
+        )
+
+    return result.model_copy(update={"answers": answers, "warnings": warnings})
 
 
 def _validate_answer(

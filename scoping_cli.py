@@ -154,7 +154,11 @@ def main() -> int:
         return 0
 
     if args.extraction:
-        from scoping.extraction import ScopingExtractionResult, extraction_to_word_values
+        from scoping.extraction import (
+            apply_derivation_rules,
+            ScopingExtractionResult,
+            extraction_to_word_values,
+        )
 
         extraction = ScopingExtractionResult.model_validate_json(
             args.extraction.read_text(encoding="utf-8")
@@ -163,6 +167,10 @@ def main() -> int:
             raise ValueError(
                 f"Extraction mode {extraction.mode!r} does not match requested mode {args.mode!r}"
             )
+        original_warning_count = len(extraction.warnings)
+        extraction = apply_derivation_rules(result=extraction, template=template)
+        for warning in extraction.warnings[original_warning_count:]:
+            print(f"Applied rule: {warning}")
         values = extraction_to_word_values(
             result=extraction,
             template=template,

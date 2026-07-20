@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -55,6 +56,22 @@ class AnswerDefinition(BaseModel):
         return self
 
 
+class AnswerDerivationRule(BaseModel):
+    id: str
+    source_answer_id: str
+    target_answer_id: str
+    source_pattern: str
+    target_value: str | list[str]
+
+    @model_validator(mode="after")
+    def validate_source_pattern(self) -> "AnswerDerivationRule":
+        try:
+            re.compile(self.source_pattern)
+        except re.error as exc:
+            raise ValueError(f"Derivation rule {self.id!r} has invalid source_pattern: {exc}") from exc
+        return self
+
+
 class ScopingTemplate(BaseModel):
     id: str
     name: str
@@ -66,6 +83,7 @@ class ScopingTemplate(BaseModel):
     expected_type_counts: dict[FieldType, int]
     project_modes: list[ProjectModeDefinition]
     answers: list[AnswerDefinition]
+    derivation_rules: list[AnswerDerivationRule] = Field(default_factory=list)
     fields: list[TemplateField]
     manifest_path: Path | None = Field(default=None, exclude=True)
     base_dir: Path | None = Field(default=None, exclude=True)
@@ -127,6 +145,24 @@ class ScopingTemplate(BaseModel):
                         f"Checkbox field {field.id!r} option {field.option_value!r} "
                         f"is not declared by answer {answer.id!r}"
                     )
+
+        rule_ids = [rule.id for rule in self.derivation_rules]
+        if len(rule_ids) != len(set(rule_ids)):
+            raise ValueError(f"Template {self.id!r} contains duplicate derivation rule ids")
+        for rule in self.derivation_rules:
+            if rule.source_answer_id not in answers_by_id or rule.target_answer_id not in answers_by_id:
+                raise ValueError(f"Derivation rule {rule.id!r} references an unknown answer")
+            source_answer = answers_by_id[rule.source_answer_id]
+            target_answer = answers_by_id[rule.target_answer_id]
+            if source_answer.type != "text":
+                raise ValueError(f"Derivation rule {rule.id!r} source answer must be text")
+            target_values = rule.target_value if isinstance(rule.target_value, list) else [rule.target_value]
+            if target_answer.type == "text" or not target_values:
+                raise ValueError(f"Derivation rule {rule.id!r} target answer must be a choice")
+            if target_answer.type == "single_choice" and len(target_values) != 1:
+                raise ValueError(f"Derivation rule {rule.id!r} must select one target value")
+            if any(value not in target_answer.choices for value in target_values):
+                raise ValueError(f"Derivation rule {rule.id!r} contains an invalid target value")
         return self
 
     def source_file(self) -> Path:
