@@ -23,6 +23,8 @@ class OllamaConfig(BaseModel):
     model: str = "llama3"
     timeout_seconds: int = 90
     scoping_timeout_seconds: int = 180
+    scoping_batch_size: int = Field(default=8, ge=1, le=100)
+    scoping_context_tokens: int = Field(default=32768, ge=4096, le=131072)
 
 
 class OneNoteConfig(BaseModel):

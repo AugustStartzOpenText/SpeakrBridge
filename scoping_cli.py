@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 
 from config import load_config
@@ -91,7 +92,13 @@ async def extract_recording(args: argparse.Namespace, template) -> Path:
 
     config = load_config()
     bundle = await SpeakrClient(config.speakr).fetch_recording_bundle(args.recording_id)
-    result = await ScopingExtractor(config.ollama).extract(
+    result = await ScopingExtractor(
+        config.ollama,
+        progress=lambda batch, total: print(
+            f"Extracting with {config.ollama.model}: batch {batch}/{total}...",
+            file=sys.stderr,
+        ),
+    ).extract(
         bundle=bundle,
         template=template,
         mode=args.mode,

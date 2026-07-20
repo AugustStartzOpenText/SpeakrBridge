@@ -181,7 +181,7 @@ class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
             metadata=RecordingMetadata(id=7, title="Example Upgrade"),
             transcript="Customer: We currently run RightFax 16.6.",
         )
-        captured: dict = {}
+        captured: dict = {"payloads": []}
 
         class FakeResponse:
             def raise_for_status(self) -> None:
@@ -194,7 +194,9 @@ class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
                         '"status":"found","value":"16.6","confidence":0.99,'
                         '"evidence":[{"source":"transcript",'
                         '"quote":"currently run RightFax 16.6"}]}]}'
-                    )
+                    ),
+                    "done_reason": "stop",
+                    "eval_count": 60,
                 }
 
         class FakeClient:
@@ -209,7 +211,7 @@ class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
 
             async def post(self, url: str, *, json: dict) -> FakeResponse:
                 captured["url"] = url
-                captured["payload"] = json
+                captured["payloads"].append(json)
                 return FakeResponse()
 
         config = OllamaConfig(host="http://ollama.test:11434", model="test-model")
@@ -223,8 +225,60 @@ class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.answer("current_open_text_fax_version").value, "16.6")
         self.assertEqual(captured["timeout"], 180)
         self.assertEqual(captured["url"], "http://ollama.test:11434/api/generate")
-        self.assertEqual(captured["payload"]["format"], "json")
-        self.assertEqual(captured["payload"]["options"]["temperature"], 0)
+        self.assertEqual(len(captured["payloads"]), 5)
+        self.assertEqual(captured["payloads"][0]["format"]["type"], "object")
+        self.assertEqual(captured["payloads"][0]["options"]["temperature"], 0)
+        self.assertEqual(captured["payloads"][0]["options"]["num_ctx"], 32768)
+
+    async def test_extractor_retries_invalid_batch_with_diagnostic_prompt(self) -> None:
+        template = ScopingTemplateCatalog(base_dir=BASE_DIR).get(TEMPLATE_ID)
+        bundle = SpeakrRecordingBundle(
+            metadata=RecordingMetadata(id=8, title="Example Upgrade"),
+            transcript="Customer: We currently run RightFax 16.6.",
+        )
+        prompts: list[str] = []
+
+        class FakeResponse:
+            def __init__(self, response_text: str) -> None:
+                self._response_text = response_text
+
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict:
+                return {"response": self._response_text, "done_reason": "stop", "eval_count": 20}
+
+        class FakeClient:
+            def __init__(self, *, timeout: int) -> None:
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, traceback) -> None:
+                return None
+
+            async def post(self, url: str, *, json: dict) -> FakeResponse:
+                prompts.append(json["prompt"])
+                if len(prompts) == 1:
+                    return FakeResponse("incomplete response")
+                return FakeResponse('{"answers":[]}')
+
+        config = OllamaConfig(
+            host="http://ollama.test:11434",
+            model="test-model",
+            scoping_batch_size=100,
+        )
+        with patch("scoping.extraction.httpx.AsyncClient", FakeClient):
+            result = await ScopingExtractor(config).extract(
+                bundle=bundle,
+                template=template,
+                mode="upgrade",
+            )
+
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("previous response was not complete valid JSON", prompts[1])
+        self.assertTrue(all(answer.status == "unknown" for answer in result.answers))
 
 
 if __name__ == "__main__":

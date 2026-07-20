@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable, Iterator
 from typing import Any, Literal
 
 import httpx
@@ -43,13 +44,22 @@ class ScopingExtractionResult(BaseModel):
         raise KeyError(f"Extraction does not contain answer {answer_id!r}")
 
 
+class ExtractionBatchResponse(BaseModel):
+    answers: list[ExtractedAnswer]
+
+
 class ScopingExtractionError(RuntimeError):
     pass
 
 
 class ScopingExtractor:
-    def __init__(self, config: OllamaConfig) -> None:
+    def __init__(
+        self,
+        config: OllamaConfig,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> None:
         self._config = config
+        self._progress = progress
 
     async def extract(
         self,
@@ -59,36 +69,94 @@ class ScopingExtractor:
         mode: ProjectMode,
     ) -> ScopingExtractionResult:
         sources = build_sources(bundle)
-        prompt = build_extraction_prompt(template=template, mode=mode, sources=sources)
-        payload = {
-            "model": self._config.model,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0, "num_predict": 8192},
-        }
+        definitions = template.extractable_answers(mode)
+        batches = list(_answer_batches(definitions, self._config.scoping_batch_size))
+        raw_answers: list[dict[str, Any]] = []
         try:
             async with httpx.AsyncClient(timeout=self._config.scoping_timeout_seconds) as client:
-                response = await client.post(f"{self._config.host}/api/generate", json=payload)
-                response.raise_for_status()
+                for batch_number, batch in enumerate(batches, start=1):
+                    if self._progress:
+                        self._progress(batch_number, len(batches))
+                    batch_payload = await self._extract_batch(
+                        client=client,
+                        template=template,
+                        mode=mode,
+                        sources=sources,
+                        definitions=batch,
+                        batch_number=batch_number,
+                        batch_count=len(batches),
+                    )
+                    raw_answers.extend(batch_payload["answers"])
         except Exception as exc:
+            if isinstance(exc, ScopingExtractionError):
+                raise
             raise ScopingExtractionError(f"Ollama scoping extraction request failed: {exc}") from exc
 
-        response_payload = response.json()
-        raw_text = response_payload.get("response", "") if isinstance(response_payload, dict) else ""
-        if not isinstance(raw_text, str) or not raw_text.strip():
-            raise ScopingExtractionError("Ollama scoping extraction response was empty")
-
-        try:
-            parsed = parse_json_object(raw_text)
-        except Exception as exc:
-            raise ScopingExtractionError("Ollama returned invalid scoping extraction JSON") from exc
         return validate_extraction_payload(
-            payload=parsed,
+            payload={"answers": raw_answers},
             template=template,
             mode=mode,
             model=self._config.model,
             sources=sources,
+        )
+
+    async def _extract_batch(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        template: ScopingTemplate,
+        mode: ProjectMode,
+        sources: dict[EvidenceSource, str],
+        definitions: list[AnswerDefinition],
+        batch_number: int,
+        batch_count: int,
+    ) -> dict[str, Any]:
+        prompt = build_extraction_prompt(
+            template=template,
+            mode=mode,
+            sources=sources,
+            answer_definitions=definitions,
+        )
+        response_payload: dict[str, Any] = {}
+        raw_text = ""
+        for attempt in range(1, 3):
+            attempt_prompt = prompt
+            if attempt > 1:
+                attempt_prompt += (
+                    "\nYour previous response was not complete valid JSON. Return only the requested "
+                    "schema, keep text values and evidence quotes concise, and include every answer_id.\n"
+                )
+            payload = {
+                "model": self._config.model,
+                "prompt": attempt_prompt,
+                "stream": False,
+                "format": ExtractionBatchResponse.model_json_schema(),
+                "options": {
+                    "temperature": 0,
+                    "num_ctx": self._config.scoping_context_tokens,
+                    "num_predict": 4096,
+                },
+            }
+            response = await client.post(f"{self._config.host}/api/generate", json=payload)
+            response.raise_for_status()
+            decoded = response.json()
+            response_payload = decoded if isinstance(decoded, dict) else {}
+            raw_text = response_payload.get("response", "")
+            if isinstance(raw_text, str) and raw_text.strip():
+                try:
+                    parsed = parse_json_object(raw_text)
+                    validated = ExtractionBatchResponse.model_validate(parsed)
+                    return validated.model_dump()
+                except Exception:
+                    pass
+
+        done_reason = response_payload.get("done_reason", "unknown")
+        eval_count = response_payload.get("eval_count", "unknown")
+        response_length = len(raw_text) if isinstance(raw_text, str) else 0
+        raise ScopingExtractionError(
+            f"Ollama returned invalid JSON for extraction batch {batch_number}/{batch_count} "
+            f"after 2 attempts (done_reason={done_reason}, eval_count={eval_count}, "
+            f"response_chars={response_length})"
         )
 
 
@@ -113,9 +181,11 @@ def build_extraction_prompt(
     template: ScopingTemplate,
     mode: ProjectMode,
     sources: dict[EvidenceSource, str],
+    answer_definitions: list[AnswerDefinition] | None = None,
 ) -> str:
     questions = []
-    for answer in template.extractable_answers(mode):
+    definitions = template.extractable_answers(mode) if answer_definitions is None else answer_definitions
+    for answer in definitions:
         question: dict[str, Any] = {
             "answer_id": answer.id,
             "question": answer.label,
@@ -151,6 +221,14 @@ REQUESTED ANSWERS:
 SOURCES:
 {source_blocks}
 """
+
+
+def _answer_batches(
+    definitions: list[AnswerDefinition],
+    batch_size: int,
+) -> Iterator[list[AnswerDefinition]]:
+    for start in range(0, len(definitions), batch_size):
+        yield definitions[start : start + batch_size]
 
 
 def validate_extraction_payload(

@@ -13,6 +13,8 @@ ollama:
   model: llama3
   timeout_seconds: 90
   scoping_timeout_seconds: 180
+  scoping_batch_size: 8
+  scoping_context_tokens: 32768
 
 onenote:
   notebook: "SC Team Notes"

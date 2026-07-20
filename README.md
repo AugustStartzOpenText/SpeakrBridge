@@ -102,6 +102,9 @@ python .\scoping_cli.py extract open_text_fax_install_upgrade_2025_08_20 upgrade
 The `recordings` command lists recent completed recordings with the numeric ID required by `extract`.
 
 The extraction JSON retains per-answer status, confidence, exact evidence, and validation warnings.
+Scoping extraction uses the configured `ollama.host` directly and processes form questions in small,
+schema-constrained batches. Configure `ollama.scoping_batch_size` to tune the default batch size of 8;
+`ollama.scoping_context_tokens` defaults these requests to a 32K context window.
 Generate a Word draft using only source-supported `found` answers:
 
 ```powershell
