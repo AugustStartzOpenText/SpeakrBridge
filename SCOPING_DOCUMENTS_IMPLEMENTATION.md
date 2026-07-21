@@ -7,6 +7,8 @@ metadata. SpeakrBridge owns template selection, structured field extraction, Wor
 generated-document lifecycle. This keeps product-specific document logic out of the upstream Speakr
 application and places Windows Word automation beside the bridge's existing Windows integrations.
 
+
+
 ## User Workflow
 
 1. Speakr emits `recording.summary.completed`.
