@@ -74,7 +74,7 @@ class SpeakrClient:
             meeting_date=metadata_raw.get("meeting_date"),
             audio_duration=metadata_raw.get("audio_duration"),
             folder=metadata_raw.get("folder"),
-            tags=metadata_raw.get("tags") or [],
+            tags=self._extract_tags(metadata_raw),
             link=metadata_raw.get("url") or metadata_raw.get("link"),
             raw=metadata_raw,
         )
@@ -145,3 +145,30 @@ class SpeakrClient:
                     participants.append(str(name))
         return participants
 
+    def _extract_tags(self, payload: dict[str, Any]) -> list[str]:
+        raw = payload.get("tags") or []
+        if isinstance(raw, str):
+            raw = [raw]
+        if not isinstance(raw, list):
+            return []
+
+        tags: list[str] = []
+        for item in raw:
+            if isinstance(item, str):
+                tag = item
+            elif isinstance(item, dict):
+                tag = (
+                    item.get("name")
+                    or item.get("title")
+                    or item.get("label")
+                    or item.get("text")
+                    or item.get("value")
+                )
+            else:
+                tag = None
+
+            if tag:
+                normalized = str(tag).strip()
+                if normalized:
+                    tags.append(normalized)
+        return tags

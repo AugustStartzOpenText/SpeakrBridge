@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SpeakrBridge Queue</title>
+    <link rel="stylesheet" href="/queue/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>SpeakrBridge Queue</h1>
+          <p id="summary">Loading pending jobs</p>
+        </div>
+        <button id="refresh-button" type="button" class="button secondary">Refresh</button>
+      </header>
+
+      <section class="section-band">
+        <div class="section-header">
+          <h2>Pending Jobs</h2>
+          <div id="status-pill" class="status-pill">Connecting</div>
+        </div>
+        <div id="message" class="message hidden"></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Meeting</th>
+                <th>Recording</th>
+                <th>Event</th>
+                <th>Created</th>
+                <th>Destination</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="jobs-body"></tbody>
+          </table>
+          <p id="empty-state" class="empty-state hidden">No pending jobs.</p>
+        </div>
+      </section>
+    </main>
+
+    <template id="job-row-template">
+      <tr>
+        <td>
+          <div class="job-title"></div>
+          <div class="job-error hidden"></div>
+        </td>
+        <td class="recording-id"></td>
+        <td class="event-name"></td>
+        <td class="created-at"></td>
+        <td>
+          <select class="section-select" aria-label="OneNote destination"></select>
+          <label class="save-default">
+            <input class="save-default-input" type="checkbox">
+            Save default
+          </label>
+        </td>
+        <td>
+          <div class="actions">
+            <button class="button route-button" type="button">Route</button>
+            <button class="button danger delete-button" type="button">Delete</button>
+          </div>
+        </td>
+      </tr>
+    </template>
+
+    <script src="/queue/app.js"></script>
+  </body>
+</html>

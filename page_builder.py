@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from html import escape
+from typing import Any
 
 from config import AppConfig
 from models import OneNotePageContent, SpeakrRecordingBundle, StructuredSummary
@@ -94,8 +95,8 @@ def _bullet_lines(items: list[str]) -> list[str]:
     return [f"- {item}" for item in items]
 
 
-def _format_tags(tags: list[str]) -> str:
-    normalized = [tag.strip() for tag in tags if tag.strip()]
+def _format_tags(tags: list[Any]) -> str:
+    normalized = [str(tag).strip() for tag in tags if str(tag).strip()]
     return ", ".join(normalized) if normalized else "None"
 
 

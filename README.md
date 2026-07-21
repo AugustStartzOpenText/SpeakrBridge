@@ -66,6 +66,15 @@ python main.py --route-pending
 python main.py --route-job <job-id>
 ```
 
+You can also manage queued jobs in a browser while the service is running:
+
+```text
+http://127.0.0.1:8080/queue
+```
+
+The queue page lists pending Speakr deliveries, routes a job to the saved default or a selected OneNote section, and deletes jobs that should be removed from the queue.
+Queue actions are limited to local browser requests because routing and deletion are destructive.
+
 ## Scoping Document Development
 
 The first configured scoping form is the combined OpenText Fax installation / upgrade quoting

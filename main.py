@@ -15,6 +15,8 @@ from ollama_client import OllamaClient
 from onenote_writer import OneNoteSection, OneNoteWriteResult, OneNoteWriter
 from pending_jobs import PendingJob, PendingJobStore
 from page_builder import build_page
+from queue_web import api_router as queue_api_router
+from queue_web import router as queue_web_router
 from scoping.api import router as scoping_router
 from scoping.catalog import ScopingTemplateCatalog
 from scoping.extraction import ScopingExtractor
@@ -81,6 +83,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SpeakrBridge", version="0.1.0", lifespan=lifespan)
+app.include_router(queue_api_router)
+app.include_router(queue_web_router)
 app.include_router(scoping_router)
 app.include_router(scoping_web_router)
 
