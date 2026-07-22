@@ -366,6 +366,59 @@ class ScopingExtractionTests(unittest.TestCase):
         self.assertTrue(values["module_integration"])
         self.assertTrue(any("confirm which method" in item for item in result.warnings))
 
+    def test_integration_application_requires_verbatim_grounding(self) -> None:
+        sources = self.sources | {"notes": "EMR Integration: The EMR in use is Meditech."}
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "integration_applications",
+                        "status": "found",
+                        "value": "Epic",
+                        "confidence": 0.91,
+                        "evidence": [
+                            {"source": "notes", "quote": "EMR in use is Meditech"}
+                        ],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=sources,
+        )
+
+        answer = result.answer("integration_applications")
+        self.assertEqual(answer.status, "unknown")
+        self.assertIsNone(answer.value)
+        self.assertTrue(any("did not match its grounded evidence" in item for item in result.warnings))
+
+    def test_integration_application_accepts_grounded_meditech_value(self) -> None:
+        sources = self.sources | {"notes": "EMR Integration: The EMR in use is Meditech."}
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "integration_applications",
+                        "status": "found",
+                        "value": "Meditech",
+                        "confidence": 0.94,
+                        "evidence": [
+                            {"source": "notes", "quote": "EMR in use is Meditech"}
+                        ],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=sources,
+        )
+
+        answer = result.answer("integration_applications")
+        self.assertEqual(answer.status, "found")
+        self.assertEqual(answer.value, "Meditech")
+
     def test_mfp_brands_append_mfp_module_and_populate_brands(self) -> None:
         sources = self.sources | {"notes": "The MFP devices are Xerox and Ricoh."}
         result = validate_extraction_payload(

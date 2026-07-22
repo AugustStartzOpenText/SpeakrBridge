@@ -59,6 +59,7 @@ Each answer has:
 - `type`: `text`, `single_choice`, or `multi_choice`
 - `choices`: allowed values for `single_choice` and `multi_choice`
 - `guidance`: optional instruction to help the model fill the answer correctly
+- `require_value_in_evidence`: optional text-only safeguard that requires the extracted value itself to appear in the grounded evidence quote
 - `applies_to`: optional list of modes where the answer is relevant
 - `extract`: whether the answer should be requested from the AI
 
@@ -110,6 +111,25 @@ Important limitation:
 - `guidance` is not a rule engine.
 - It influences the model prompt, but it does not guarantee a result.
 - If you need repeatable behavior, add or update a `derivation_rules` entry.
+
+### What `require_value_in_evidence` Does
+
+`require_value_in_evidence` is a stricter validation option for text answers that should be copied from the sources rather than paraphrased or guessed.
+
+Use it for fields like:
+
+- application names
+- EMR names
+- product names
+- brand names
+- other text answers where the exact grounded value matters
+
+Example:
+
+- if the evidence quote says `EMR in use is Meditech`, then a returned value of `Meditech` is allowed
+- a returned value of `Epic` with that same evidence will be rejected and downgraded to `unknown`
+
+This is useful when a text answer should behave more like a controlled extraction of a name, even though it is still stored as free text.
 
 ## `fields`
 

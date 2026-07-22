@@ -468,6 +468,18 @@ def _validate_answer(
     if status == "found" and not evidence:
         warnings.append(f"Answer {definition.id!r} had no verifiable evidence; marked unknown")
         return _unknown_answer(definition.id), warnings
+    if (
+        status == "found"
+        and definition.type == "text"
+        and definition.require_value_in_evidence
+        and isinstance(value, str)
+        and evidence
+        and not _text_value_is_grounded_in_evidence(value, evidence)
+    ):
+        warnings.append(
+            f"Answer {definition.id!r} value did not match its grounded evidence; marked unknown"
+        )
+        return _unknown_answer(definition.id), warnings
 
     return (
         ExtractedAnswer(
@@ -528,6 +540,16 @@ def _validated_evidence(
             continue
         evidence.append(ExtractionEvidence(source=source_name, quote=quote))
     return evidence
+
+
+def _text_value_is_grounded_in_evidence(value: str, evidence: list[ExtractionEvidence]) -> bool:
+    normalized_value = _normalize_for_match(value)
+    if not normalized_value:
+        return False
+    for item in evidence:
+        if normalized_value in _normalize_for_match(item.quote):
+            return True
+    return False
 
 
 def _normalize_for_match(value: str) -> str:

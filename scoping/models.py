@@ -44,6 +44,7 @@ class AnswerDefinition(BaseModel):
     applies_to: list[ProjectMode] = Field(default_factory=lambda: ["install", "upgrade"])
     extract: bool = True
     guidance: str | None = None
+    require_value_in_evidence: bool = False
 
     @model_validator(mode="after")
     def validate_choices(self) -> "AnswerDefinition":
@@ -53,6 +54,8 @@ class AnswerDefinition(BaseModel):
             raise ValueError(f"Choice answer {self.id!r} requires choices")
         if len(self.choices) != len(set(self.choices)):
             raise ValueError(f"Answer {self.id!r} contains duplicate choices")
+        if self.require_value_in_evidence and self.type != "text":
+            raise ValueError(f"Only text answers may require verbatim evidence grounding: {self.id!r}")
         return self
 
 
