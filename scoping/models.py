@@ -10,6 +10,7 @@ FieldType = Literal["text", "checkbox", "dropdown"]
 ProjectMode = Literal["install", "upgrade"]
 AnswerType = Literal["text", "single_choice", "multi_choice"]
 DerivationOperation = Literal["set_if_missing", "append"]
+TemplateEvidenceSource = Literal["metadata", "notes", "speakr_summary", "transcript", "scoping_focus"]
 
 
 class TemplateField(BaseModel):
@@ -61,7 +62,8 @@ class AnswerDefinition(BaseModel):
 
 class AnswerDerivationRule(BaseModel):
     id: str
-    source_answer_id: str
+    source_answer_id: str | None = None
+    source_sources: list[TemplateEvidenceSource] = Field(default_factory=list)
     target_answer_id: str
     when_source_found: bool = False
     match_any: list[str] = Field(default_factory=list)
@@ -74,9 +76,19 @@ class AnswerDerivationRule(BaseModel):
     def validate_match_terms(self) -> "AnswerDerivationRule":
         match_terms = [term.strip().casefold() for term in self.match_any]
         excluded_terms = [term.strip().casefold() for term in self.exclude_any]
+        has_source_answer = bool(self.source_answer_id and self.source_answer_id.strip())
+        has_source_sources = bool(self.source_sources)
+        if has_source_answer == has_source_sources:
+            raise ValueError(
+                f"Derivation rule {self.id!r} must define exactly one of source_answer_id or source_sources"
+            )
         if self.when_source_found == bool(match_terms):
             raise ValueError(
                 f"Derivation rule {self.id!r} must define either when_source_found or match_any"
+            )
+        if has_source_sources and self.when_source_found:
+            raise ValueError(
+                f"Derivation rule {self.id!r} cannot use when_source_found with source_sources"
             )
         if self.when_source_found and excluded_terms:
             raise ValueError(f"Derivation rule {self.id!r} cannot exclude terms when_source_found")
@@ -167,12 +179,15 @@ class ScopingTemplate(BaseModel):
         if len(rule_ids) != len(set(rule_ids)):
             raise ValueError(f"Template {self.id!r} contains duplicate derivation rule ids")
         for rule in self.derivation_rules:
-            if rule.source_answer_id not in answers_by_id or rule.target_answer_id not in answers_by_id:
+            if rule.target_answer_id not in answers_by_id:
                 raise ValueError(f"Derivation rule {rule.id!r} references an unknown answer")
-            source_answer = answers_by_id[rule.source_answer_id]
+            if rule.source_answer_id is not None and rule.source_answer_id not in answers_by_id:
+                raise ValueError(f"Derivation rule {rule.id!r} references an unknown answer")
             target_answer = answers_by_id[rule.target_answer_id]
-            if source_answer.type != "text":
-                raise ValueError(f"Derivation rule {rule.id!r} source answer must be text")
+            if rule.source_answer_id is not None:
+                source_answer = answers_by_id[rule.source_answer_id]
+                if source_answer.type != "text":
+                    raise ValueError(f"Derivation rule {rule.id!r} source answer must be text")
             target_values = rule.target_value if isinstance(rule.target_value, list) else [rule.target_value]
             if target_answer.type == "text" or not target_values:
                 raise ValueError(f"Derivation rule {rule.id!r} target answer must be a choice")

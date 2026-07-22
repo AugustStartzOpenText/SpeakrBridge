@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from config import OllamaConfig
 from models import SpeakrRecordingBundle
-from scoping.models import AnswerDefinition, ProjectMode, ScopingTemplate
+from scoping.models import AnswerDefinition, AnswerDerivationRule, ProjectMode, ScopingTemplate
 
 EvidenceSource = Literal["metadata", "notes", "speakr_summary", "transcript", "scoping_focus"]
 ExtractionStatus = Literal["found", "inferred", "unknown"]
@@ -324,7 +324,7 @@ def validate_extraction_payload(
         answers=validated,
         warnings=warnings,
     )
-    return apply_derivation_rules(result=result, template=template)
+    return apply_derivation_rules(result=result, template=template, sources=sources)
 
 
 def extraction_to_word_values(
@@ -367,6 +367,7 @@ def apply_derivation_rules(
     *,
     result: ScopingExtractionResult,
     template: ScopingTemplate,
+    sources: dict[EvidenceSource, str] | None = None,
 ) -> ScopingExtractionResult:
     if result.template_id != template.id or result.template_version != template.version:
         raise ValueError("Extraction result does not match the selected template version")
@@ -375,23 +376,41 @@ def apply_derivation_rules(
     answer_indexes = {answer.answer_id: index for index, answer in enumerate(answers)}
     warnings = list(result.warnings)
     for rule in template.derivation_rules:
-        source_index = answer_indexes.get(rule.source_answer_id)
         target_index = answer_indexes.get(rule.target_answer_id)
-        if source_index is None or target_index is None:
+        if target_index is None:
             continue
-        source = answers[source_index]
         target = answers[target_index]
-        if source.status != "found" or not isinstance(source.value, str):
-            continue
-
-        grounded_text = "\n".join(evidence.quote for evidence in source.evidence)
-        if not grounded_text:
-            continue
-        if not rule.when_source_found:
-            if not any(_contains_term(grounded_text, term) for term in rule.match_any):
+        evidence: list[ExtractionEvidence] = []
+        rule_source_label = ""
+        if rule.source_answer_id is not None:
+            source_index = answer_indexes.get(rule.source_answer_id)
+            if source_index is None:
                 continue
-            if any(_contains_term(grounded_text, term) for term in rule.exclude_any):
+            source = answers[source_index]
+            if source.status != "found" or not isinstance(source.value, str):
                 continue
+            grounded_text = "\n".join(item.quote for item in source.evidence)
+            if not grounded_text:
+                continue
+            if not rule.when_source_found:
+                if not any(_contains_term(grounded_text, term) for term in rule.match_any):
+                    continue
+                if any(_contains_term(grounded_text, term) for term in rule.exclude_any):
+                    continue
+            evidence = list(target.evidence)
+            for item in source.evidence:
+                if item not in evidence:
+                    evidence.append(item)
+            rule_source_label = repr(rule.source_answer_id)
+            source_confidence = source.confidence
+        else:
+            if sources is None:
+                continue
+            evidence = _source_rule_evidence(rule=rule, sources=sources)
+            if not evidence:
+                continue
+            rule_source_label = f"sources {rule.source_sources!r}"
+            source_confidence = max((target.confidence, 0.9))
 
         target_definition = template.answer(rule.target_answer_id)
         if rule.operation == "set_if_missing":
@@ -411,26 +430,53 @@ def apply_derivation_rules(
             )
         if target_value is None:
             raise RuntimeError(f"Derivation rule {rule.id!r} produced an invalid target value")
-        evidence = list(target.evidence)
-        for item in source.evidence:
-            if item not in evidence:
-                evidence.append(item)
         answers[target_index] = ExtractedAnswer(
             answer_id=target.answer_id,
             status="found",
             value=target_value,
-            confidence=max(source.confidence, target.confidence),
+            confidence=max(source_confidence, target.confidence),
             evidence=evidence,
         )
         warning = (
             f"Derived answer {target.answer_id!r} using deterministic rule {rule.id!r} "
-            f"from {source.answer_id!r}"
+            f"from {rule_source_label}"
         )
         if rule.review_warning:
             warning += f"; review required: {rule.review_warning}"
         warnings.append(warning)
 
     return result.model_copy(update={"answers": answers, "warnings": warnings})
+
+
+def _source_rule_evidence(
+    *,
+    rule: AnswerDerivationRule,
+    sources: dict[EvidenceSource, str],
+) -> list[ExtractionEvidence]:
+    evidence: list[ExtractionEvidence] = []
+    for source_name in rule.source_sources:
+        source_text = sources.get(source_name, "")
+        if not source_text:
+            continue
+        if not any(_contains_term(source_text, term) for term in rule.match_any):
+            continue
+        if any(_contains_term(source_text, term) for term in rule.exclude_any):
+            continue
+        quote = _first_matching_term_quote(source_text, rule.match_any)
+        if not quote:
+            continue
+        item = ExtractionEvidence(source=source_name, quote=quote)
+        if item not in evidence:
+            evidence.append(item)
+    return evidence
+
+
+def _first_matching_term_quote(source_text: str, terms: list[str]) -> str:
+    for term in terms:
+        match = re.search(re.escape(term), source_text, flags=re.IGNORECASE)
+        if match:
+            return source_text[match.start() : match.end()]
+    return ""
 
 
 def _contains_term(text: str, term: str) -> bool:

@@ -93,6 +93,15 @@
       "review_warning": "Epic integrations must use FCL or API; confirm which method is in scope."
     },
     {
+      "id": "fcl_requires_integration_module",
+      "source_sources": ["speakr_summary", "notes", "transcript", "scoping_focus"],
+      "target_answer_id": "modules",
+      "match_any": ["FCL"],
+      "target_value": ["integration_module"],
+      "operation": "append",
+      "review_warning": "FCL was mentioned in the meeting content; confirm which application uses the Integration Module."
+    },
+    {
       "id": "mfp_devices_require_mfp_module",
       "source_answer_id": "mfp_brands",
       "target_answer_id": "modules",

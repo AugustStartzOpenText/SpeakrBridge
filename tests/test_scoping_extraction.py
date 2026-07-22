@@ -419,6 +419,31 @@ class ScopingExtractionTests(unittest.TestCase):
         self.assertEqual(answer.status, "found")
         self.assertEqual(answer.value, "Meditech")
 
+    def test_fcl_in_summary_appends_integration_module_without_model_selection(self) -> None:
+        sources = self.sources | {"speakr_summary": "EMR Integration: The customer will use FCL."}
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "modules",
+                        "status": "unknown",
+                        "value": None,
+                        "confidence": 0,
+                        "evidence": [],
+                    }
+                ]
+            },
+            template=self.template,
+            mode="upgrade",
+            model="test-model",
+            sources=sources,
+        )
+
+        self.assertEqual(result.answer("modules").value, ["integration_module"])
+        values = extraction_to_word_values(result=result, template=self.template)
+        self.assertTrue(values["module_integration"])
+        self.assertTrue(any("fcl_requires_integration_module" in item for item in result.warnings))
+
     def test_mfp_brands_append_mfp_module_and_populate_brands(self) -> None:
         sources = self.sources | {"notes": "The MFP devices are Xerox and Ricoh."}
         result = validate_extraction_payload(
