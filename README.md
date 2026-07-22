@@ -24,6 +24,19 @@ This repository contains the initial service scaffold from the PRD. The core pip
 
 ## Setup
 
+On Windows, once setup is complete, start Speakr, SpeakrBridge, and all three local web pages with:
+
+```powershell
+.\Start-SpeakrBridge.ps1
+```
+
+By default, the script expects Speakr in a sibling `Speakr` folder and opens it at
+`http://127.0.0.1:7000`. Override either value when needed, for example:
+
+```powershell
+.\Start-SpeakrBridge.ps1 -SpeakrPath "C:\Code\Speakr" -SpeakrUrl "http://127.0.0.1:3000"
+```
+
 1. Create and activate a Python 3.11+ virtual environment.
 2. Install dependencies:
 
