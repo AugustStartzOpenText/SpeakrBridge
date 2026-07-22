@@ -13,6 +13,7 @@ from scoping.extraction import (
     build_sources,
     extraction_to_word_values,
     ScopingExtractor,
+    extract_scoping_focus,
     validate_extraction_payload,
 )
 
@@ -50,6 +51,47 @@ class ScopingExtractionTests(unittest.TestCase):
         self.assertNotIn('"answer_id": "project_type"', prompt)
         self.assertIn("Customer wants no onsite services", prompt)
         self.assertIn("currently run RightFax 16.6", prompt)
+
+    def test_focus_phrase_extracts_priority_scoping_source_from_transcript(self) -> None:
+        bundle = SpeakrRecordingBundle(
+            metadata=self.bundle.metadata,
+            transcript=(
+                "Earlier discussion about discovery. "
+                "Let me summarize this project from 50,000 feet. "
+                "This is a new install of RightFax 25.4 into a two-server collective. "
+                "There is no suid yet as the software has not been purchased. "
+                "The integrations are going to be Epic. That is going to use the REST API. "
+                "HP MFP devices with 500 of them across all the sites. "
+                "Office 365 will be using OAuth and there's a local SMTP. "
+                "Also some users would like some admin training so that should be quoted out as well."
+            ),
+        )
+
+        self.assertTrue(
+            extract_scoping_focus(bundle).startswith("Let me summarize this project from 50,000 feet.")
+        )
+        sources = build_sources(bundle)
+        self.assertIn("scoping_focus", sources)
+        self.assertIn("HP MFP devices", sources["scoping_focus"])
+        self.assertIn("Office 365 will be using OAuth", sources["scoping_focus"])
+
+    def test_prompt_marks_scoping_focus_as_high_priority_when_present(self) -> None:
+        bundle = SpeakrRecordingBundle(
+            metadata=self.bundle.metadata,
+            transcript=(
+                "Let me summarize this project from 50,000 feet. "
+                "HP MFP devices with 500 of them across all the sites."
+            ),
+        )
+        prompt = build_extraction_prompt(
+            template=self.template,
+            mode="install",
+            sources=build_sources(bundle),
+        )
+
+        self.assertIn('A source named "scoping_focus" contains the speaker\'s end-of-call scoping recap.', prompt)
+        self.assertIn('<source name="scoping_focus">', prompt)
+        self.assertIn("HP MFP devices with 500 of them across all the sites.", prompt)
 
     def test_found_answer_requires_verifiable_exact_evidence(self) -> None:
         result = validate_extraction_payload(
@@ -350,6 +392,51 @@ class ScopingExtractionTests(unittest.TestCase):
         self.assertTrue(values["module_mfp"])
         self.assertEqual(values["mfp_brands"], "Xerox and Ricoh")
         self.assertTrue(any("mfp_devices_require_mfp_module" in item for item in result.warnings))
+
+    def test_focus_source_evidence_can_drive_mfp_and_training_fields(self) -> None:
+        sources = build_sources(
+            SpeakrRecordingBundle(
+                metadata=self.bundle.metadata,
+                transcript=(
+                    "Let me summarize this project from 50,000 feet. "
+                    "HP MFP devices with 500 of them across all the sites. "
+                    "Also some users would like some admin training so that should be quoted out as well."
+                ),
+            )
+        )
+        result = validate_extraction_payload(
+            payload={
+                "answers": [
+                    {
+                        "answer_id": "mfp_brands",
+                        "status": "found",
+                        "value": "HP",
+                        "confidence": 0.97,
+                        "evidence": [
+                            {"source": "scoping_focus", "quote": "HP MFP devices"}
+                        ],
+                    },
+                    {
+                        "answer_id": "training_types",
+                        "status": "found",
+                        "value": ["admin_intro"],
+                        "confidence": 0.85,
+                        "evidence": [
+                            {"source": "scoping_focus", "quote": "some users would like some admin training"}
+                        ],
+                    },
+                ]
+            },
+            template=self.template,
+            mode="install",
+            model="test-model",
+            sources=sources,
+        )
+
+        values = extraction_to_word_values(result=result, template=self.template)
+        self.assertEqual(values["mfp_brands"], "HP")
+        self.assertTrue(values["module_mfp"])
+        self.assertTrue(values["training_admin_intro"])
 
 
 class ScopingExtractorHttpTests(unittest.IsolatedAsyncioTestCase):
