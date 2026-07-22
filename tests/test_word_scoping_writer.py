@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from scoping.catalog import ScopingTemplateCatalog
-from scoping.word_writer import WordScopingWriter
+from scoping.word_writer import WordScopingGenerationResult, WordScopingWriter
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATE_ID = "open_text_fax_install_upgrade_2025_08_20"
@@ -29,7 +29,7 @@ class WordScopingWriterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "draft.docx"
             with patch.object(writer, "_run_bridge", side_effect=fake_run_bridge):
-                writer.generate(
+                result = writer.generate(
                     template=self.template,
                     mode="upgrade",
                     values={"end_user_company_name": "Example Hospital"},
@@ -37,6 +37,7 @@ class WordScopingWriterTests(unittest.TestCase):
                 )
 
         self.assertEqual(captured["command_name"], "fill_template")
+        self.assertEqual(result, WordScopingGenerationResult(output_path=output_path.resolve(), warnings=[]))
         mapped_values = {item["id"]: item["value"] for item in captured["payload"]["values"]}
         self.assertEqual(mapped_values["end_user_company_name"], "Example Hospital")
         self.assertFalse(mapped_values["project_type_install"])
@@ -52,6 +53,33 @@ class WordScopingWriterTests(unittest.TestCase):
                     values={"onsite_services_yes": "yes"},
                     output_path=Path(directory) / "draft.docx",
                 )
+
+    def test_generate_truncates_legacy_text_fields_before_calling_word(self) -> None:
+        writer = WordScopingWriter()
+        captured: dict = {}
+
+        def fake_run_bridge(command_name: str, payload: dict) -> dict:
+            captured["command_name"] = command_name
+            captured["payload"] = payload
+            Path(payload["outputPath"]).touch()
+            return {"outputPath": payload["outputPath"]}
+
+        oversized_value = "A" * 300
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "draft.docx"
+            with patch.object(writer, "_run_bridge", side_effect=fake_run_bridge):
+                result = writer.generate(
+                    template=self.template,
+                    mode="upgrade",
+                    values={"end_user_company_name": oversized_value},
+                    output_path=output_path,
+                )
+
+        mapped_values = {item["id"]: item["value"] for item in captured["payload"]["values"]}
+        self.assertEqual(captured["command_name"], "fill_template")
+        self.assertEqual(len(result.warnings), 1)
+        self.assertEqual(len(mapped_values["end_user_company_name"]), 255)
+        self.assertTrue(mapped_values["end_user_company_name"].endswith("..."))
 
     def test_generate_refuses_to_overwrite_output(self) -> None:
         writer = WordScopingWriter()
@@ -90,6 +118,15 @@ class WordScopingWriterTests(unittest.TestCase):
 
         self.assertIn("index   = $Position", bridge_source)
         self.assertNotIn("index   = [int]$FormField.Index", bridge_source)
+
+    def test_bridge_truncates_legacy_text_fields_defensively(self) -> None:
+        bridge_source = (BASE_DIR / "scripts" / "word_scoping_bridge.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("function Limit-TextFieldValue", bridge_source)
+        self.assertIn("$maxLength = 255", bridge_source)
+        self.assertIn('$field.Result = Limit-TextFieldValue', bridge_source)
 
 
 if __name__ == "__main__":

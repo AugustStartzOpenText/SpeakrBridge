@@ -112,9 +112,14 @@ class ScopingJobStoreTests(unittest.TestCase):
 
         generating = self.store.claim_generation(job.job_id, include_inferred=False)
         self.assertEqual(generating.status, "generating")
-        completed = self.store.complete_generation(job.job_id, output_path="/tmp/example.docx")
+        completed = self.store.complete_generation(
+            job.job_id,
+            output_path="/tmp/example.docx",
+            generation_warnings=["Truncated field 'company' from 300 to 255 characters for legacy Word form compatibility"],
+        )
         self.assertEqual(completed.status, "completed")
         self.assertIsNotNone(completed.completed_at)
+        self.assertEqual(len(completed.generation_warnings), 1)
 
         with self.assertRaises(InvalidScopingJobTransition):
             self.store.claim_generation(job.job_id, include_inferred=False)

@@ -162,6 +162,12 @@ function renderJobs() {
       ? `Updated ${formatDate(job.updated_at)}`
       : `${job.found_count} found / ${job.unknown_count} unknown / ${job.warning_count} warnings`;
 
+    const warningList = document.createElement("div");
+    warningList.className = "job-counts";
+    if (job.generation_warnings?.length) {
+      warningList.textContent = job.generation_warnings.join(" ");
+    }
+
     const actions = document.createElement("div");
     actions.className = "job-actions";
     if (job.status === "review") {
@@ -181,7 +187,9 @@ function renderJobs() {
       const operation = job.failed_operation === "generation" ? "generate" : "extract";
       actions.append(actionButton(`Retry ${operation}`, () => runJobAction(job, operation), true));
     }
-    row.append(identity, meta, counts, actions);
+    row.append(identity, meta, counts);
+    if (job.generation_warnings?.length) row.append(warningList);
+    row.append(actions);
     container.append(row);
   }
 }

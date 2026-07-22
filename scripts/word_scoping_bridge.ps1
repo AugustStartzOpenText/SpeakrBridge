@@ -133,6 +133,22 @@ function Reset-FormFields {
     }
 }
 
+function Limit-TextFieldValue {
+    param(
+        [string]$FieldId,
+        [string]$Value
+    )
+
+    $maxLength = 255
+    if ($Value.Length -le $maxLength) {
+        return $Value
+    }
+
+    $truncated = $Value.Substring(0, $maxLength - 3).TrimEnd() + "..."
+    Write-DebugLog "Truncated text field '$FieldId' from $($Value.Length) to $($truncated.Length) characters"
+    return $truncated
+}
+
 function Set-FormFieldValue {
     param(
         $Document,
@@ -153,7 +169,7 @@ function Set-FormFieldValue {
 
     switch ($actualType) {
         "text" {
-            $field.Result = [string]$FieldValue.value
+            $field.Result = Limit-TextFieldValue -FieldId ([string]$FieldValue.id) -Value ([string]$FieldValue.value)
         }
         "checkbox" {
             $field.CheckBox.Value = [bool]$FieldValue.value

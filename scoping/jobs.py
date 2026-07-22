@@ -28,6 +28,7 @@ class ScopingJob(BaseModel):
     revision: int = Field(ge=1)
     status: JobStatus
     extraction: ScopingExtractionResult | None = None
+    generation_warnings: list[str] = Field(default_factory=list)
     output_path: str | None = None
     include_inferred: bool = False
     error: str | None = None
@@ -245,7 +246,7 @@ class ScopingJobStore:
                 """
                 UPDATE scoping_jobs
                 SET status = 'extracting', extraction_json = NULL, output_path = NULL,
-                    include_inferred = 0, error = NULL, failed_operation = NULL,
+                    generation_warnings_json = NULL, include_inferred = 0, error = NULL, failed_operation = NULL,
                     started_at = ?, completed_at = NULL, updated_at = ?
                 WHERE job_id = ? AND status IN ('ready', 'review', 'failed')
                 """,
@@ -284,7 +285,7 @@ class ScopingJobStore:
                 """
                 UPDATE scoping_jobs
                 SET status = 'generating', include_inferred = ?, output_path = NULL,
-                    error = NULL, failed_operation = NULL, started_at = ?,
+                    generation_warnings_json = NULL, error = NULL, failed_operation = NULL, started_at = ?,
                     completed_at = NULL, updated_at = ?
                 WHERE job_id = ?
                   AND extraction_json IS NOT NULL
@@ -296,17 +297,24 @@ class ScopingJobStore:
                 self._raise_transition(connection, job_id, "generating")
         return self.get_job(job_id)
 
-    def complete_generation(self, job_id: str, *, output_path: str) -> ScopingJob:
+    def complete_generation(
+        self,
+        job_id: str,
+        *,
+        output_path: str,
+        generation_warnings: list[str] | None = None,
+    ) -> ScopingJob:
         now = _utc_now()
+        warnings_json = json.dumps(generation_warnings or [])
         with self._connect() as connection:
             result = connection.execute(
                 """
                 UPDATE scoping_jobs
-                SET status = 'completed', output_path = ?, error = NULL,
+                SET status = 'completed', output_path = ?, generation_warnings_json = ?, error = NULL,
                     failed_operation = NULL, completed_at = ?, updated_at = ?
                 WHERE job_id = ? AND status = 'generating'
                 """,
-                (output_path, now, now, job_id),
+                (output_path, warnings_json, now, now, job_id),
             )
             if result.rowcount != 1:
                 self._raise_transition(connection, job_id, "completed")
@@ -375,6 +383,7 @@ class ScopingJobStore:
                         status IN ('ready', 'extracting', 'review', 'generating', 'completed', 'failed')
                     ),
                     extraction_json TEXT,
+                    generation_warnings_json TEXT,
                     output_path TEXT,
                     include_inferred INTEGER NOT NULL DEFAULT 0,
                     error TEXT,
@@ -395,6 +404,14 @@ class ScopingJobStore:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS scoping_jobs_status ON scoping_jobs(status)"
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(scoping_jobs)").fetchall()
+            }
+            if "generation_warnings_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE scoping_jobs ADD COLUMN generation_warnings_json TEXT"
+                )
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS scoping_inbox (
@@ -450,6 +467,7 @@ class ScopingJobStore:
             if row["extraction_json"]
             else None
         )
+        generation_warnings = json.loads(row["generation_warnings_json"] or "[]")
         return ScopingJob(
             job_id=row["job_id"],
             recording_id=row["recording_id"],
@@ -460,6 +478,7 @@ class ScopingJobStore:
             revision=row["revision"],
             status=row["status"],
             extraction=extraction,
+            generation_warnings=[str(item) for item in generation_warnings],
             output_path=row["output_path"],
             include_inferred=bool(row["include_inferred"]),
             error=row["error"],

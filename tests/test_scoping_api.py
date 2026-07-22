@@ -78,6 +78,7 @@ class ScopingApiTests(unittest.TestCase):
         jobs_response = self.client.get("/api/scoping/jobs", params={"status": "completed"})
         self.assertEqual(jobs_response.status_code, 200)
         self.assertEqual(jobs_response.json()[0]["found_count"], 1)
+        self.assertEqual(jobs_response.json()[0]["generation_warnings"], [])
         self.assertNotIn("extraction", jobs_response.json()[0])
 
         document_response = self.client.get(f"/api/scoping/jobs/{job_id}/document")

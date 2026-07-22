@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 from pathlib import Path
 import re
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from models import SpeakrRecordingBundle
 from scoping.catalog import ScopingTemplateCatalog
@@ -14,6 +14,11 @@ from scoping.jobs import ScopingJob, ScopingJobStore
 from scoping.models import ProjectMode, ScopingTemplate
 
 LOGGER = logging.getLogger(__name__)
+
+
+class GeneratedDocument(NamedTuple):
+    output_path: Path
+    warnings: list[str]
 
 
 class RecordingSource(Protocol):
@@ -38,7 +43,7 @@ class DocumentWriter(Protocol):
         mode: ProjectMode,
         values: dict[str, str | bool],
         output_path: str | Path,
-    ) -> Path: ...
+    ) -> GeneratedDocument: ...
 
 
 class ScopingService:
@@ -121,16 +126,20 @@ class ScopingService:
                 include_inferred=job.include_inferred,
             )
             output_path = self._next_output_path(job)
-            generated_path = await asyncio.to_thread(
+            generation_result = await asyncio.to_thread(
                 self._writer.generate,
                 template=template,
                 mode=job.mode,
                 values=values,
                 output_path=output_path,
             )
-            generated_path = generated_path.resolve()
+            generated_path = generation_result.output_path.resolve()
             self._assert_output_path(generated_path)
-            self.store.complete_generation(job_id, output_path=str(generated_path))
+            self.store.complete_generation(
+                job_id,
+                output_path=str(generated_path),
+                generation_warnings=generation_result.warnings,
+            )
             LOGGER.info("Scoping document generated", extra={"job_id": job_id})
         except Exception as exc:
             LOGGER.exception("Scoping document generation failed", extra={"job_id": job_id})

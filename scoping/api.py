@@ -77,6 +77,7 @@ class ScopingJobSummaryResponse(BaseModel):
     inferred_count: int
     unknown_count: int
     warning_count: int
+    generation_warnings: list[str]
     document_available: bool
     error: str | None
     created_at: datetime
@@ -85,6 +86,7 @@ class ScopingJobSummaryResponse(BaseModel):
     @classmethod
     def from_job(cls, job: ScopingJob) -> "ScopingJobSummaryResponse":
         answers = job.extraction.answers if job.extraction else []
+        extraction_warning_count = len(job.extraction.warnings) if job.extraction else 0
         return cls(
             job_id=job.job_id,
             recording_id=job.recording_id,
@@ -97,7 +99,8 @@ class ScopingJobSummaryResponse(BaseModel):
             found_count=sum(answer.status == "found" for answer in answers),
             inferred_count=sum(answer.status == "inferred" for answer in answers),
             unknown_count=sum(answer.status == "unknown" for answer in answers),
-            warning_count=len(job.extraction.warnings) if job.extraction else 0,
+            warning_count=extraction_warning_count + len(job.generation_warnings),
+            generation_warnings=job.generation_warnings,
             document_available=job.status == "completed" and bool(job.output_path),
             error=job.error,
             created_at=job.created_at,

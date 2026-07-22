@@ -9,6 +9,7 @@ from models import RecordingMetadata, SpeakrRecordingBundle
 from scoping.catalog import ScopingTemplateCatalog
 from scoping.extraction import ExtractedAnswer, ExtractionEvidence, ScopingExtractionResult
 from scoping.jobs import ScopingJobStore
+from scoping.service import GeneratedDocument
 from scoping.service import ScopingService
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -49,11 +50,11 @@ class FakeExtractor:
 
 
 class FakeWriter:
-    def generate(self, *, template, mode, values, output_path) -> Path:
+    def generate(self, *, template, mode, values, output_path) -> GeneratedDocument:
         path = Path(output_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"fake-docx")
-        return path
+        return GeneratedDocument(output_path=path, warnings=[])
 
 
 class ScopingServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -90,6 +91,7 @@ class ScopingServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed.status, "completed")
         self.assertTrue(self.service.completed_document(job.job_id).is_file())
         self.assertTrue(Path(completed.output_path).is_relative_to(self.service.output_directory))
+        self.assertEqual(completed.generation_warnings, [])
 
 
 if __name__ == "__main__":
